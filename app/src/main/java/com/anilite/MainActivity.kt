@@ -98,21 +98,44 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 .fillMaxSize()
         ) {
             composable("home") {
-                HomeScreen(onAnimeClick = { navController.navigate("detail/$it") })
+                HomeScreen(
+                    onAnimeClick = { aniListId, aniwatchId ->
+                        navController.navigate(
+                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
+                        )
+                    }
+                )
             }
             composable("search") {
-                SearchScreen(onAnimeClick = { navController.navigate("detail/$it") })
+                // SearchScreen still uses old API string ID for now
+                // we will update this separately
+                SearchScreen(onAnimeClick = { aniwatchId ->
+                    navController.navigate("detail/0?aniwatchId=$aniwatchId")
+                })
             }
             composable("watchlist") {
-                WatchlistScreen(onAnimeClick = { navController.navigate("detail/$it") })
+                WatchlistScreen(onAnimeClick = { aniwatchId ->
+                    navController.navigate("detail/0?aniwatchId=$aniwatchId")
+                })
             }
             composable(
-                "detail/{animeId}",
-                arguments = listOf(navArgument("animeId") { type = NavType.StringType })
+                route = "detail/{aniListId}?aniwatchId={aniwatchId}",
+                arguments = listOf(
+                    navArgument("aniListId") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("aniwatchId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
             ) { backStack ->
-                val animeId = backStack.arguments?.getString("animeId") ?: ""
+                val aniListId = backStack.arguments?.getInt("aniListId") ?: 0
+                val aniwatchId = backStack.arguments?.getString("aniwatchId")
+                    ?.takeIf { it.isNotEmpty() }
+
                 AnimeDetailScreen(
-                    animeId = animeId,
+                    aniListId = aniListId,
+                    aniwatchId = aniwatchId,
                     onBack = { navController.popBackStack() },
                     onPlayEpisode = { _, epId, title -> onPlayEpisode(epId, title) }
                 )
