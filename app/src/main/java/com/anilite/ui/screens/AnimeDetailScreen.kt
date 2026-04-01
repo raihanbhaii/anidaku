@@ -65,7 +65,8 @@ fun AnimeDetailScreen(
 
             // 3. Get episodes from old API - FIXED: removed .episodes
             resolvedAniwatchId?.let { slug ->
-                episodes = AniListRepository.getEpisodes(slug)
+                val episodesResponse = AniListRepository.getEpisodes(slug)
+                episodes = episodesResponse.episodes
             }
 
             inWatchlist = WatchlistManager.isInWatchlist(context, aniListId.toString())
@@ -236,12 +237,12 @@ fun AnimeDetailScreen(
             }
         }
 
-        items(episodes, key = { it.id }) { ep ->
+        items(episodes, key = { it.episodeId }) { ep ->
             EpisodeRow(
                 episode = ep,
                 onClick = {
                     resolvedAniwatchId?.let { slug ->
-                        onPlayEpisode(slug, ep.id, "Episode ${ep.number}")
+                        onPlayEpisode(slug, ep.episodeId, "Episode ${ep.episodeNo}")
                     }
                 }
             )
@@ -279,7 +280,7 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "${episode.number}",
+                text = "${episode.episodeNo}",
                 color = Purple40,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -288,13 +289,13 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.title ?: "Episode ${episode.number}",
+                text = episode.name ?: "Episode ${episode.episodeNo}",
                 color = Color.White,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (episode.isFiller) {
+            if (episode.filler) {
                 Text("Filler", color = Color(0xFFFF6B6B), fontSize = 10.sp)
             }
         }
