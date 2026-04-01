@@ -69,7 +69,6 @@ fun AnimeDetailScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         item {
-            // Hero image
             Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
                 AsyncImage(
                     model = detail?.info?.poster,
@@ -151,10 +150,10 @@ fun AnimeDetailScreen(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                detail?.info?.description?.let {
+                detail?.info?.description?.let { desc ->
                     var expanded by remember { mutableStateOf(false) }
                     Text(
-                        text = it,
+                        text = desc,
                         color = Color(0xFFB0B0C0),
                         fontSize = 12.sp,
                         maxLines = if (expanded) Int.MAX_VALUE else 3,
@@ -179,14 +178,15 @@ fun AnimeDetailScreen(
         }
 
         items(episodes, key = { it.episodeId ?: it.number ?: 0 }) { ep ->
-           EpisodeItem(
-    episode = ep,
-    onClick = {
-        ep.epNumericId?.let { numId ->
-            onPlayEpisode(animeId, numId)
+            EpisodeRow(
+                episode = ep,
+                onClick = {
+                    ep.epNumericId?.let { numId ->
+                        onPlayEpisode(animeId, numId, "Episode ${ep.number}")
+                    }
+                }
+            )
         }
-    }
-)
 
         item { Spacer(Modifier.height(80.dp)) }
     }
@@ -205,7 +205,7 @@ fun StatChip(text: String) {
 }
 
 @Composable
-fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
+fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -241,5 +241,5 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
         }
         Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(20.dp))
     }
-    Divider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
+    HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
 }
