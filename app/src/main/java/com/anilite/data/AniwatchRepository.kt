@@ -1,30 +1,35 @@
 package com.anilite.data
 
-import io.ktor.client.call.*
-import io.ktor.client.request.*
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.parameter
+import kotlinx.serialization.Serializable
 
-object AniwatchRepository {
+@Serializable
+data class AniwatchAnime(
+    val id: String? = null,
+    val name: String? = null,
+    val img: String? = null,
+    val episodes: List<Any>? = null   // You can make this more specific later
+)
 
-    private const val BASE_URL = "https://anidexz-api.vercel.app/aniwatch"
+class AniwatchRepository {
 
-    // Home
-    suspend fun getHome(): HomeResponse {
-        return httpClient.get("$BASE_URL/").body()
+    private val client = NetworkClient.client
+    private val baseUrl = "https://api.aniwatch.to"   // Change if your actual API base is different
+
+    suspend fun searchAnime(query: String): List<AniwatchAnime> {
+        return client.get("$baseUrl/search") {
+            parameter("q", query)
+        }.body()
     }
 
-    // Search
-    suspend fun searchAnime(query: String): SearchResponse {
-        val formatted = query.trim().replace(" ", "+")
-        return httpClient.get("$BASE_URL/search?keyword=$formatted").body()
+    suspend fun getAnimeDetails(animeId: String): AniwatchAnime {
+        return client.get("$baseUrl/anime/$animeId").body()
     }
 
-    // Anime Detail
-    suspend fun getAnimeDetail(id: String): AnimeDetailResponse {
-        return httpClient.get("$BASE_URL/anime/$id").body()
-    }
-
-    // Episodes
-    suspend fun getEpisodes(id: String): EpisodesResponse {
-        return httpClient.get("$BASE_URL/episodes/$id").body()
+    // Add more functions as needed (e.g. getEpisodes, etc.)
+    suspend fun getEpisodes(animeId: String): List<Any> {
+        return client.get("$baseUrl/anime/$animeId/episodes").body()
     }
 }
