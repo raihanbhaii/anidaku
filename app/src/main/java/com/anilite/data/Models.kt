@@ -67,12 +67,19 @@ data class AnimeMoreInfo(
 
 data class EpisodesResponse(val data: EpisodesData?)
 data class EpisodesData(val episodes: List<Episode>?, val totalEpisodes: Int?)
+
+// episodeId format from this API: "anime-slug?ep=136197"
+// we extract the number after "ep=" to use with megaplay.buzz
 data class Episode(
-    val episodeId: String?,
+    val episodeId: String?,   // e.g. "steinsgate-3?ep=213"
     val number: Int?,
     val title: String?,
     val isFiller: Boolean?
-)
+) {
+    // extracts just the numeric ep id for the player
+    val epNumericId: String?
+        get() = episodeId?.substringAfterLast("ep=")
+}
 
 data class ServersResponse(val data: ServersData?)
 data class ServersData(
@@ -84,9 +91,7 @@ data class Server(val serverId: Int?, val serverName: String?)
 data class SourcesResponse(val data: SourcesData?)
 data class SourcesData(
     val sources: List<Source>?,
-    val tracks: List<Track>?,
-    val anilistID: Int?,
-    val malID: Int?
+    val tracks: List<Track>?
 )
 data class Source(val url: String?, val type: String?)
 data class Track(val file: String?, val label: String?, val kind: String?, val default: Boolean?)
