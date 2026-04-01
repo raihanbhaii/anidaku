@@ -23,45 +23,38 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.anilite.data.AniwatchAnime
-import com.anilite.data.AniwatchRepository
-import com.anilite.data.WatchlistAnime
-import com.anilite.data.WatchlistManager
+import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import com.anilite.ui.theme.SurfaceVariant
-import java.text.SimpleDateFormat
-import java.util.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun AnimeDetailScreen(
-    animeId: String,                    // ← Now String (Aniwatch slug)
+    animeId: String,                    // Aniwatch slug (e.g. "one-piece-100")
     onBack: () -> Unit,
-    onPlayEpisode: (episodeId: String, episodeTitle: String, episodeNumber: Int) -> Unit
+    onPlayEpisode: (playerUrl: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var anime by remember { mutableStateOf<AniwatchAnime?>(null) }
-    var episodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
+    var animeDetail by remember { mutableStateOf<AnimeDetailResponse?>(null) }
+    var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var inWatchlist by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
+    var errorMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(animeId) {
         isLoading = true
+        errorMsg = ""
         try {
-            // Fetch anime details
-            val animeResponse = /* Call your detail endpoint */
-                // We'll create a proper function in repository later
-                // For now, placeholder - replace with actual call
-                fetchAnimeDetails(animeId)
-
-            anime = animeResponse.info   // adjust based on actual response
-
-            // Fetch episodes list
-            episodes = fetchEpisodes(animeId)
+            animeDetail = AniwatchRepository.getAnimeDetail(animeId)
+            val episodesResponse = AniwatchRepository.getEpisodes(animeId)
+            episodes = episodesResponse.episodes
 
             inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
+            errorMsg = "${e::class.simpleName}: ${e.message ?: "Failed to load"}"
             e.printStackTrace()
         } finally {
             isLoading = false
@@ -75,22 +68,32 @@ fun AnimeDetailScreen(
         return
     }
 
-    val currentAnime = anime ?: run {
+    if (errorMsg.isNotEmpty() || animeDetail == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Failed to load anime", color = Color.White)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(errorMsg.ifEmpty { "Failed to load anime" }, color = Color.Red)
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { /* retry logic */ }) {
+                    Text("Retry")
+                }
+            }
         }
         return
     }
+
+    val info = animeDetail!!.info
+    val episodeList = episodes
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Header Image + Buttons
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
-                    model = currentAnime.img,
+                    model = info.img,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -102,9 +105,11 @@ fun AnimeDetailScreen(
                         )
                     )
                 )
+
                 IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
+
                 IconButton(
                     onClick = {
                         if (inWatchlist) {
@@ -114,9 +119,9 @@ fun AnimeDetailScreen(
                                 context,
                                 WatchlistAnime(
                                     id = animeId,
-                                    name = currentAnime.name,
-                                    img = currentAnime.img,
-                                    type = currentAnime.category ?: "TV"
+                                    name = info.name,
+                                    img = info.img,
+                                    type = info.category ?: "TV"
                                 )
                             )
                         }
@@ -133,26 +138,26 @@ fun AnimeDetailScreen(
             }
         }
 
+        // Title & Info
         item {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(currentAnime.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(info.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
                 Spacer(Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    currentAnime.quality?.let { StatChip(it) }
-                    currentAnime.duration?.let { StatChip("${it}") }
-                    currentAnime.category?.let { StatChip(it.replace("-", " ").uppercase()) }
+                    info.quality?.let { StatChip(it) }
+                    info.duration?.let { StatChip(it) }
+                    info.category?.let { StatChip(it.replace("-", " ").uppercase()) }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
                 // Description
-                currentAnime.description?.takeIf { it.isNotEmpty() }?.let { desc ->
+                info.description?.takeIf { it.isNotEmpty() }?.let { desc ->
                     var expanded by remember { mutableStateOf(false) }
                     Text(
                         text = desc.replace("<br>", "\n").replace("<[^>]*>".toRegex(), ""),
@@ -178,17 +183,11 @@ fun AnimeDetailScreen(
                     containerColor = Color.Transparent,
                     contentColor = Purple40
                 ) {
-                    listOf("Episodes", "Info").forEachIndexed { index, title ->
+                    listOf("Episodes", "More Info").forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
-                            text = {
-                                Text(
-                                    title,
-                                    color = if (selectedTab == index) Purple40 else Color.Gray,
-                                    fontSize = 13.sp
-                                )
-                            }
+                            text = { Text(title, color = if (selectedTab == index) Purple40 else Color.Gray) }
                         )
                     }
                 }
@@ -200,83 +199,50 @@ fun AnimeDetailScreen(
         when (selectedTab) {
             0 -> item {
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    if (episodes.isNotEmpty()) {
+                    if (episodeList.isNotEmpty()) {
                         Text(
-                            "Episodes",
+                            "All Episodes (${episodeList.size})",
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
 
-                        episodes.forEach { ep ->
+                        episodeList.forEach { ep ->
                             EpisodeItem(
-                                episodeNumber = ep.episodeNo,
-                                episodeTitle = ep.name,
+                                episode = ep,
                                 onClick = {
-                                    onPlayEpisode(ep.episodeId, ep.name, ep.episodeNo)
+                                    // Build MegaPlay URL using Aniwatch episode ID
+                                    val epIdNumber = ep.episodeId.substringAfter("?ep=")
+                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
+
+                                    onPlayEpisode(playerUrl, ep.name, ep.episodeNo)
                                 }
                             )
                         }
                     } else {
-                        Text(
-                            "No episodes available",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Text("No episodes available", color = Color.Gray, modifier = Modifier.padding(16.dp))
                     }
                 }
             }
 
             1 -> item {
-                // More info can be added here later (studios, genres, etc.)
-                Text(
-                    "More information coming soon...",
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("More Information", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Coming soon...", color = Color.Gray)
+                    // You can later add moreInfo, genres, etc. from animeDetail
+                }
             }
         }
 
-        item { Spacer(Modifier.height(80.dp)) }
+        item { Spacer(Modifier.height(100.dp)) }
     }
 }
 
-// Helper data class for episodes
-data class EpisodeItem(
-    val name: String,
-    val episodeNo: Int,
-    val episodeId: String   // full "slug?ep=12345"
-)
-
-// Temporary fetch functions - we'll improve this in repository
-private suspend fun fetchAnimeDetails(id: String): Any {  // Replace 'Any' with proper response type later
-    // TODO: Implement proper call to /aniwatch/anime/{id}
-    return Unit // placeholder
-}
-
-private suspend fun fetchEpisodes(id: String): List<EpisodeItem> {
-    // TODO: Call https://anidexz-api.vercel.app/aniwatch/episodes/{id}
-    return emptyList()
-}
-
-// Keep your existing helper composables
+// Episode Item with MegaPlay
 @Composable
-fun StatChip(text: String) {
-    Text(
-        text = text,
-        color = Color.White,
-        fontSize = 11.sp,
-        modifier = Modifier
-            .background(SurfaceVariant, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 3.dp)
-    )
-}
-
-@Composable
-fun EpisodeItem(episodeNumber: Int, episodeTitle: String, onClick: () -> Unit) {
+fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -290,14 +256,29 @@ fun EpisodeItem(episodeNumber: Int, episodeTitle: String, onClick: () -> Unit) {
                 .background(SurfaceVariant, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text("$episodeNumber", color = Purple40, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("${episode.episodeNo}", color = Purple40, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
+
         Spacer(Modifier.width(14.dp))
+
         Column(modifier = Modifier.weight(1f)) {
-            Text(episodeTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text("Episode $episodeNumber", color = Color.Gray, fontSize = 12.sp)
+            Text(episode.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("Episode ${episode.episodeNo}", color = Color.Gray, fontSize = 12.sp)
         }
+
         Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(22.dp))
     }
     HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
+}
+
+@Composable
+fun StatChip(text: String) {
+    Text(
+        text = text,
+        color = Color.White,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .background(SurfaceVariant, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+    )
 }
