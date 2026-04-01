@@ -1,4 +1,5 @@
 @file:OptIn(ExperimentalFoundationApi::class)
+
 package com.anilite.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -38,7 +39,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
         isLoading = true
         errorMsg = ""
         try {
-            homeData = AniwatchRepository.getHome()
+            homeData = AniApiService.getHome()
         } catch (e: Exception) {
             errorMsg = "${e::class.simpleName}: ${e.message ?: "unknown error"}"
             e.printStackTrace()
@@ -48,7 +49,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     }
 
     if (isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Purple40)
         }
         return
@@ -74,11 +75,19 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2A0A0A))
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Error loading anime:", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(
+                        "Error loading anime:",
+                        color = Color.Red,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                     Spacer(Modifier.height(4.dp))
                     Text(errorMsg, color = Color(0xFFFF8080), fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = { loadTrigger++ }, colors = ButtonDefaults.buttonColors(containerColor = Purple40)) {
+                    Button(
+                        onClick = { loadTrigger++ },
+                        colors = ButtonDefaults.buttonColors(containerColor = Purple40)
+                    ) {
                         Text("Retry")
                     }
                 }
@@ -88,7 +97,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 
         val data = homeData ?: return@Column
 
-        // Spotlight
+        // Spotlight Carousel
         if (data.spotlightAnimes.isNotEmpty()) {
             SpotlightCarousel(
                 animes = data.spotlightAnimes,
@@ -117,13 +126,33 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             AniwatchAnimeRow("Upcoming", data.topUpcomingAnimes, onAnimeClick)
         }
 
-        if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() && 
-            data.topUpcomingAnimes.isEmpty() && errorMsg.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No anime available", color = Color.Gray, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Text("Check your internet connection", color = Color.Gray, fontSize = 14.sp)
-                    Button(onClick = { loadTrigger++ }, colors = ButtonDefaults.buttonColors(containerColor = Purple40)) {
+        // Empty state
+        if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() &&
+            data.topUpcomingAnimes.isEmpty() && errorMsg.isEmpty()
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "No anime available",
+                        color = Color.Gray,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Check your internet connection",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                    Button(
+                        onClick = { loadTrigger++ },
+                        colors = ButtonDefaults.buttonColors(containerColor = Purple40)
+                    ) {
                         Text("Retry")
                     }
                 }
@@ -142,7 +171,7 @@ fun SpotlightCarousel(
 ) {
     if (animes.isEmpty()) return
 
-    val pagerState = rememberPagerState { animes.size }
+    val pagerState = rememberPagerState(pageCount = { animes.size })
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -156,6 +185,7 @@ fun SpotlightCarousel(
     Box(modifier = Modifier.fillMaxWidth().height(220.dp)) {
         HorizontalPager(state = pagerState) { page ->
             val anime = animes[page]
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -170,7 +200,10 @@ fun SpotlightCarousel(
 
                 Box(
                     modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD0A0A0F)), startY = 80f)
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xDD0A0A0F)),
+                            startY = 80f
+                        )
                     )
                 )
 
@@ -183,9 +216,13 @@ fun SpotlightCarousel(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val info = listOfNotNull(anime.category, anime.duration, anime.quality).take(3)
+                    val info = listOfNotNull(anime.category, anime.duration, anime.quality)
                     if (info.isNotEmpty()) {
-                        Text(text = info.joinToString(" • "), color = Color(0xFFB0B0C0), fontSize = 11.sp)
+                        Text(
+                            text = info.joinToString(" • "),
+                            color = Color(0xFFB0B0C0),
+                            fontSize = 11.sp
+                        )
                     }
                 }
 
@@ -207,6 +244,7 @@ fun SpotlightCarousel(
             }
         }
 
+        // Page Indicators
         if (animes.size > 1) {
             Row(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
@@ -252,7 +290,7 @@ fun AniwatchAnimeRow(
                     is SpotlightAnime -> item.id
                     is BasicAnime -> item.id
                     is AnimeItem -> item.id
-                    else -> ""
+                    else -> System.currentTimeMillis().toString()
                 }
             }) { item ->
                 val id = when (item) {
@@ -314,7 +352,9 @@ fun AniwatchAnimeCard(
                 .height(155.dp)
                 .clip(RoundedCornerShape(8.dp))
         )
+
         Spacer(Modifier.height(4.dp))
+
         Text(
             text = name,
             color = Color.White,
@@ -325,7 +365,11 @@ fun AniwatchAnimeCard(
 
         episodeCount?.let { eps ->
             if (eps > 0) {
-                Text(text = "Ep $eps", color = Purple40, fontSize = 10.sp)
+                Text(
+                    text = "Ep $eps",
+                    color = Purple40,
+                    fontSize = 10.sp
+                )
             }
         }
     }
