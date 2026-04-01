@@ -52,10 +52,11 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
             isLoading = true
             try {
                 val searchQuery = if (query.isNotBlank()) query else selectedGenre ?: ""
-                val response = RetrofitClient.api.search(searchQuery)
-                results = response.data?.animes ?: emptyList()
+                val response = RetrofitClient.api.search(searchQuery) // ← no .data wrapper
+                results = response.animes                              // ← direct .animes
             } catch (e: Exception) {
                 e.printStackTrace()
+                results = emptyList()
             } finally {
                 isLoading = false
             }
@@ -134,10 +135,10 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(results, key = { it.id ?: it.name ?: "" }) { anime ->
+                items(results, key = { it.id.ifEmpty { it.name } }) { anime ->  // ← no nullable
                     AnimeCard(
                         anime = anime,
-                        onClick = { anime.id?.let(onAnimeClick) },
+                        onClick = { if (anime.id.isNotEmpty()) onAnimeClick(anime.id) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
