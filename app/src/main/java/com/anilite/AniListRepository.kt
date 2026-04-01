@@ -1,467 +1,547 @@
-package com.anilite.data
+package com.anilite.ui.screens
 
-import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.anilite.data.AniListAnime
+import com.anilite.data.AniListRepository
+import com.anilite.data.WatchlistAnime
+import com.anilite.data.WatchlistManager
+import com.anilite.ui.theme.Purple40
+import com.anilite.ui.theme.SurfaceVariant
+import java.text.SimpleDateFormat
+import java.util.*
 
-object AniListRepository {
-    private const val TAG = "AniListRepository"
+@Composable
+fun AnimeDetailScreen(
+    aniListId: Int,
+    onBack: () -> Unit,
+    onPlayEpisode: (aniwatchId: String, episodeId: String, title: String) -> Unit
+) {
+    val context = LocalContext.current
+    var anime by remember { mutableStateOf<AniListAnime?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var inWatchlist by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(0) }
 
-    suspend fun getTrending(): AniListSearchResult = withContext(Dispatchers.IO) {
+    LaunchedEffect(aniListId) {
         try {
-            val query = """
-                query {
-                    Page(page: 1, perPage: 20) {
-                        pageInfo {
-                            hasNextPage
-                            currentPage
-                            totalPages
-                        }
-                        media(sort: TRENDING_DESC, type: ANIME, isAdult: false) {
-                            id
-                            title {
-                                romaji
-                                english
-                                userPreferred
-                            }
-                            coverImage {
-                                large
-                                extraLarge
-                            }
-                            bannerImage
-                            format
-                            status
-                            duration
-                            episodes
-                            nextAiringEpisode {
-                                episode
-                                airingAt
-                            }
-                            isAdult
-                        }
-                    }
+            anime = AniListRepository.getDetail(aniListId)
+            inWatchlist = WatchlistManager.isInWatchlist(context, aniListId.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            isLoading = false
+        }
+    }
+
+    if (isLoading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Purple40)
+        }
+        return
+    }
+
+    val info = anime ?: run {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Failed to load anime", color = Color.White)
+        }
+        return
+    }
+
+    val airedEpisodes = info.nextAiringEpisode?.episode?.minus(1) ?: info.episodes
+    val totalEpisodes = info.episodes
+    val isAiring = info.status == "RELEASING"
+    val isFinished = info.status == "FINISHED"
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        item {
+            Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                AsyncImage(
+                    model = info.bannerImage ?: info.coverImage,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)),
+                            startY = 120f
+                        )
+                    )
+                )
+                IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
+                    Icon(Icons.Default.ArrowBack, null, tint = Color.White)
                 }
-            """
-            
-            val response = AniListClient.query(query)
-            parseAnimeSearchResult(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching trending", e)
-            AniListSearchResult(emptyList(), false, 1, 1)
-        }
-    }
-
-    suspend fun getAiring(): AniListSearchResult = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                    Page(page: 1, perPage: 20) {
-                        pageInfo {
-                            hasNextPage
-                            currentPage
-                            totalPages
+                IconButton(
+                    onClick = {
+                        if (inWatchlist) {
+                            WatchlistManager.removeFromWatchlist(context, aniListId.toString())
+                        } else {
+                            WatchlistManager.addToWatchlist(
+                                context,
+                                WatchlistAnime(
+                                    id = aniListId.toString(),
+                                    name = info.title,
+                                    img = info.coverImage,
+                                    type = info.format ?: "TV"
+                                )
+                            )
                         }
-                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false, status: RELEASING) {
-                            id
-                            title {
-                                romaji
-                                english
-                                userPreferred
-                            }
-                            coverImage {
-                                large
-                                extraLarge
-                            }
-                            bannerImage
-                            format
-                            status
-                            duration
-                            episodes
-                            nextAiringEpisode {
-                                episode
-                                airingAt
-                            }
-                            isAdult
-                        }
-                    }
-                }
-            """
-            
-            val response = AniListClient.query(query)
-            parseAnimeSearchResult(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching airing", e)
-            AniListSearchResult(emptyList(), false, 1, 1)
-        }
-    }
-
-    suspend fun getPopular(): AniListSearchResult = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                    Page(page: 1, perPage: 20) {
-                        pageInfo {
-                            hasNextPage
-                            currentPage
-                            totalPages
-                        }
-                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
-                            id
-                            title {
-                                romaji
-                                english
-                                userPreferred
-                            }
-                            coverImage {
-                                large
-                                extraLarge
-                            }
-                            bannerImage
-                            format
-                            status
-                            duration
-                            episodes
-                            nextAiringEpisode {
-                                episode
-                                airingAt
-                            }
-                            isAdult
-                        }
-                    }
-                }
-            """
-            
-            val response = AniListClient.query(query)
-            parseAnimeSearchResult(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching popular", e)
-            AniListSearchResult(emptyList(), false, 1, 1)
-        }
-    }
-
-    suspend fun getUpcoming(): AniListSearchResult = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                    Page(page: 1, perPage: 20) {
-                        pageInfo {
-                            hasNextPage
-                            currentPage
-                            totalPages
-                        }
-                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false, status: NOT_YET_RELEASED) {
-                            id
-                            title {
-                                romaji
-                                english
-                                userPreferred
-                            }
-                            coverImage {
-                                large
-                                extraLarge
-                            }
-                            bannerImage
-                            format
-                            status
-                            duration
-                            episodes
-                            nextAiringEpisode {
-                                episode
-                                airingAt
-                            }
-                            isAdult
-                        }
-                    }
-                }
-            """
-            
-            val response = AniListClient.query(query)
-            parseAnimeSearchResult(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching upcoming", e)
-            AniListSearchResult(emptyList(), false, 1, 1)
-        }
-    }
-
-    suspend fun getDetail(animeId: Int): AniListAnime? = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                    Media(id: $animeId, type: ANIME) {
-                        id
-                        title {
-                            romaji
-                            english
-                            userPreferred
-                        }
-                        coverImage {
-                            large
-                            extraLarge
-                        }
-                        bannerImage
-                        description
-                        genres
-                        averageScore
-                        status
-                        format
-                        episodes
-                        duration
-                        season
-                        seasonYear
-                        studios {
-                            nodes {
-                                name
-                            }
-                        }
-                        nextAiringEpisode {
-                            episode
-                            airingAt
-                        }
-                        startDate {
-                            year
-                            month
-                            day
-                        }
-                        endDate {
-                            year
-                            month
-                            day
-                        }
-                        popularity
-                        favourites
-                        isAdult
-                    }
-                }
-            """
-            
-            val response = AniListClient.query(query)
-            val media = response.getJSONObject("Media")
-            parseAnimeDetail(media)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching anime detail", e)
-            null
-        }
-    }
-
-    suspend fun searchAnime(searchQuery: String): AniListSearchResult = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                    Page(page: 1, perPage: 20) {
-                        pageInfo {
-                            hasNextPage
-                            currentPage
-                            totalPages
-                        }
-                        media(search: "$searchQuery", type: ANIME, isAdult: false) {
-                            id
-                            title {
-                                romaji
-                                english
-                                userPreferred
-                            }
-                            coverImage {
-                                large
-                                extraLarge
-                            }
-                            bannerImage
-                            format
-                            status
-                            duration
-                            episodes
-                            nextAiringEpisode {
-                                episode
-                                airingAt
-                            }
-                            isAdult
-                        }
-                    }
-                }
-            """
-            
-            val response = AniListClient.query(query)
-            parseAnimeSearchResult(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error searching anime", e)
-            AniListSearchResult(emptyList(), false, 1, 1)
-        }
-    }
-
-    suspend fun getEpisodes(animeId: Int): List<Episode> = withContext(Dispatchers.IO) {
-        try {
-            // For now, return empty list
-            // You can implement this with a separate API if needed
-            emptyList()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching episodes", e)
-            emptyList()
-        }
-    }
-
-    private fun parseAnimeSearchResult(data: JSONObject): AniListSearchResult {
-        val animes = mutableListOf<AniListAnime>()
-        val page = data.getJSONObject("Page")
-        val mediaArray = page.getJSONArray("media")
-        
-        for (i in 0 until mediaArray.length()) {
-            val media = mediaArray.getJSONObject(i)
-            val anime = parseAnimeFromJson(media)
-            animes.add(anime)
-        }
-        
-        val pageInfo = page.getJSONObject("pageInfo")
-        return AniListSearchResult(
-            animes = animes,
-            hasNextPage = pageInfo.getBoolean("hasNextPage"),
-            currentPage = pageInfo.getInt("currentPage"),
-            totalPages = pageInfo.getInt("totalPages")
-        )
-    }
-
-    private fun parseAnimeFromJson(media: JSONObject): AniListAnime {
-        val titleObj = media.getJSONObject("title")
-        val title = when {
-            titleObj.has("userPreferred") && !titleObj.isNull("userPreferred") -> 
-                titleObj.getString("userPreferred")
-            titleObj.has("english") && !titleObj.isNull("english") -> 
-                titleObj.getString("english")
-            else -> titleObj.getString("romaji")
-        }
-        
-        val coverObj = media.getJSONObject("coverImage")
-        val coverImage = when {
-            coverObj.has("extraLarge") && !coverObj.isNull("extraLarge") -> 
-                coverObj.getString("extraLarge")
-            else -> coverObj.getString("large")
-        }
-        
-        val bannerImage = if (media.has("bannerImage") && !media.isNull("bannerImage")) {
-            media.getString("bannerImage")
-        } else null
-        
-        var nextAiring: NextAiring? = null
-        if (media.has("nextAiringEpisode") && !media.isNull("nextAiringEpisode")) {
-            val nextObj = media.getJSONObject("nextAiringEpisode")
-            nextAiring = NextAiring(
-                episode = nextObj.getInt("episode"),
-                airingAt = nextObj.getLong("airingAt")
-            )
-        }
-        
-        return AniListAnime(
-            id = media.getInt("id"),
-            title = title,
-            coverImage = coverImage,
-            bannerImage = bannerImage,
-            format = if (media.has("format") && !media.isNull("format")) media.getString("format") else null,
-            status = if (media.has("status") && !media.isNull("status")) media.getString("status") else null,
-            duration = if (media.has("duration") && !media.isNull("duration")) media.getInt("duration") else null,
-            episodes = if (media.has("episodes") && !media.isNull("episodes")) media.getInt("episodes") else null,
-            nextAiringEpisode = nextAiring,
-            isAdult = if (media.has("isAdult")) media.getBoolean("isAdult") else false
-        )
-    }
-
-    private fun parseAnimeDetail(media: JSONObject): AniListAnime {
-        val titleObj = media.getJSONObject("title")
-        val title = when {
-            titleObj.has("userPreferred") && !titleObj.isNull("userPreferred") -> 
-                titleObj.getString("userPreferred")
-            titleObj.has("english") && !titleObj.isNull("english") -> 
-                titleObj.getString("english")
-            else -> titleObj.getString("romaji")
-        }
-        
-        val coverObj = media.getJSONObject("coverImage")
-        val coverImage = when {
-            coverObj.has("extraLarge") && !coverObj.isNull("extraLarge") -> 
-                coverObj.getString("extraLarge")
-            else -> coverObj.getString("large")
-        }
-        
-        val bannerImage = if (media.has("bannerImage") && !media.isNull("bannerImage")) {
-            media.getString("bannerImage")
-        } else null
-        
-        val description = if (media.has("description") && !media.isNull("description")) {
-            media.getString("description")
-        } else null
-        
-        val genres = mutableListOf<String>()
-        if (media.has("genres") && !media.isNull("genres")) {
-            val genresArray = media.getJSONArray("genres")
-            for (i in 0 until genresArray.length()) {
-                genres.add(genresArray.getString(i))
-            }
-        }
-        
-        val averageScore = if (media.has("averageScore") && !media.isNull("averageScore")) {
-            media.getInt("averageScore")
-        } else null
-        
-        val studios = mutableListOf<String>()
-        if (media.has("studios") && !media.isNull("studios")) {
-            val studiosObj = media.getJSONObject("studios")
-            if (studiosObj.has("nodes") && !studiosObj.isNull("nodes")) {
-                val nodesArray = studiosObj.getJSONArray("nodes")
-                for (i in 0 until nodesArray.length()) {
-                    val node = nodesArray.getJSONObject(i)
-                    studios.add(node.getString("name"))
+                        inWatchlist = !inWatchlist
+                    },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                ) {
+                    Icon(
+                        if (inWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        null,
+                        tint = if (inWatchlist) Purple40 else Color.White
+                    )
                 }
             }
         }
-        
-        var nextAiring: NextAiring? = null
-        if (media.has("nextAiringEpisode") && !media.isNull("nextAiringEpisode")) {
-            val nextObj = media.getJSONObject("nextAiringEpisode")
-            nextAiring = NextAiring(
-                episode = nextObj.getInt("episode"),
-                airingAt = nextObj.getLong("airingAt")
-            )
+
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = info.title,
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                // Title English if available
+                info.titleEnglish?.takeIf { it != info.title }?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = it,
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                }
+                
+                Spacer(Modifier.height(8.dp))
+
+                // Stats Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    info.averageScore?.let { StatChip("⭐ ${it / 10.0}") }
+                    info.format?.let { StatChip(it) }
+                    info.duration?.let { StatChip("${it}m") }
+                    info.status?.let { StatChip(it.replace("_", " ")) }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Episode Info
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    airedEpisodes?.let {
+                        EpisodeStatChip(
+                            icon = Icons.Default.PlayArrow,
+                            text = "Episodes aired: $it${totalEpisodes?.let { " / $it" } ?: ""}"
+                        )
+                    }
+                    if (isAiring && info.nextAiringEpisode != null) {
+                        val nextDate = Date(info.nextAiringEpisode!!.airingAt * 1000)
+                        val dateFormat = SimpleDateFormat("MMM dd", Locale.getDefault())
+                        EpisodeStatChip(
+                            icon = Icons.Default.Update,
+                            text = "Next: Ep ${info.nextAiringEpisode!!.episode} (${dateFormat.format(nextDate)})"
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Genres
+                if (info.genres.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        info.genres.forEach { genre ->
+                            Text(
+                                text = genre,
+                                color = Purple40,
+                                fontSize = 11.sp,
+                                modifier = Modifier
+                                    .border(1.dp, Purple40, RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Description
+                info.description?.takeIf { it.isNotEmpty() }?.let { desc ->
+                    var expanded by remember { mutableStateOf(false) }
+                    Text(
+                        text = desc.replace("<br>", "\n").replace("<[^>]*>".toRegex(), ""),
+                        color = Color(0xFFB0B0C0),
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp,
+                        maxLines = if (expanded) Int.MAX_VALUE else 5,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { expanded = !expanded }
+                    )
+                    Text(
+                        text = if (expanded) "Show less" else "Read more",
+                        color = Purple40,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { expanded = !expanded }
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Tabs
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    contentColor = Purple40
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Episodes", color = if (selectedTab == 0) Purple40 else Color.Gray) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Characters", color = if (selectedTab == 1) Purple40 else Color.Gray) }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = { Text("Voice Actors", color = if (selectedTab == 2) Purple40 else Color.Gray) }
+                    )
+                    Tab(
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        text = { Text("Relations", color = if (selectedTab == 3) Purple40 else Color.Gray) }
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+            }
         }
-        
-        var startDate: FuzzyDate? = null
-        if (media.has("startDate") && !media.isNull("startDate")) {
-            val startObj = media.getJSONObject("startDate")
-            startDate = FuzzyDate(
-                year = if (startObj.has("year") && !startObj.isNull("year")) startObj.getInt("year") else null,
-                month = if (startObj.has("month") && !startObj.isNull("month")) startObj.getInt("month") else null,
-                day = if (startObj.has("day") && !startObj.isNull("day")) startObj.getInt("day") else null
-            )
+
+        // Content based on selected tab
+        when (selectedTab) {
+            0 -> {
+                // Episodes - Show aired episodes list
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        if (airedEpisodes != null && airedEpisodes > 0) {
+                            Text(
+                                text = "Aired Episodes",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            for (i in 1..airedEpisodes.coerceAtMost(20)) {
+                                EpisodeItem(
+                                    episodeNumber = i,
+                                    onClick = { /* Handle episode click if you have streaming */ }
+                                )
+                            }
+                            if (airedEpisodes > 20) {
+                                Text(
+                                    text = "+ ${airedEpisodes - 20} more episodes",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "No episodes aired yet",
+                                color = Color.Gray,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            1 -> {
+                // Characters
+                if (info.characters.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(info.characters) { character ->
+                                CharacterCard(character = character)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                } else {
+                    item {
+                        Text(
+                            text = "No character information available",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+            }
+            2 -> {
+                // Voice Actors
+                if (info.voiceActors.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(info.voiceActors) { va ->
+                                VoiceActorCard(voiceActor = va)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                } else {
+                    item {
+                        Text(
+                            text = "No voice actor information available",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+            }
+            3 -> {
+                // Relations
+                if (info.relations.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(info.relations) { relation ->
+                                RelationCard(relation = relation)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                } else {
+                    item {
+                        Text(
+                            text = "No related anime available",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+            }
         }
-        
-        var endDate: FuzzyDate? = null
-        if (media.has("endDate") && !media.isNull("endDate")) {
-            val endObj = media.getJSONObject("endDate")
-            endDate = FuzzyDate(
-                year = if (endObj.has("year") && !endObj.isNull("year")) endObj.getInt("year") else null,
-                month = if (endObj.has("month") && !endObj.isNull("month")) endObj.getInt("month") else null,
-                day = if (endObj.has("day") && !endObj.isNull("day")) endObj.getInt("day") else null
-            )
-        }
-        
-        return AniListAnime(
-            id = media.getInt("id"),
-            title = title,
-            coverImage = coverImage,
-            bannerImage = bannerImage,
-            description = description,
-            genres = genres,
-            averageScore = averageScore,
-            status = if (media.has("status") && !media.isNull("status")) media.getString("status") else null,
-            format = if (media.has("format") && !media.isNull("format")) media.getString("format") else null,
-            episodes = if (media.has("episodes") && !media.isNull("episodes")) media.getInt("episodes") else null,
-            duration = if (media.has("duration") && !media.isNull("duration")) media.getInt("duration") else null,
-            season = if (media.has("season") && !media.isNull("season")) media.getString("season") else null,
-            seasonYear = if (media.has("seasonYear") && !media.isNull("seasonYear")) media.getInt("seasonYear") else null,
-            studios = studios,
-            nextAiringEpisode = nextAiring,
-            startDate = startDate,
-            endDate = endDate,
-            popularity = if (media.has("popularity") && !media.isNull("popularity")) media.getInt("popularity") else null,
-            favourites = if (media.has("favourites") && !media.isNull("favourites")) media.getInt("favourites") else null,
-            isAdult = if (media.has("isAdult")) media.getBoolean("isAdult") else false
+
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+fun StatChip(text: String) {
+    Text(
+        text = text,
+        color = Color.White,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .background(SurfaceVariant, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+    )
+}
+
+@Composable
+fun EpisodeStatChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .background(SurfaceVariant, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(icon, null, tint = Purple40, modifier = Modifier.size(12.dp))
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 11.sp
         )
+    }
+}
+
+@Composable
+fun EpisodeItem(episodeNumber: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(SurfaceVariant, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$episodeNumber",
+                color = Purple40,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Episode $episodeNumber",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Aired",
+                color = Color.Gray,
+                fontSize = 11.sp
+            )
+        }
+        Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(20.dp))
+    }
+    HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
+}
+
+@Composable
+fun CharacterCard(character: com.anilite.data.Character) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable { /* Navigate to character detail */ }
+    ) {
+        AsyncImage(
+            model = character.image,
+            contentDescription = character.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = character.name,
+            color = Color.White,
+            fontSize = 12.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun VoiceActorCard(voiceActor: com.anilite.data.VoiceActor) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable { /* Navigate to voice actor detail */ }
+    ) {
+        AsyncImage(
+            model = voiceActor.image,
+            contentDescription = voiceActor.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = voiceActor.name,
+            color = Color.White,
+            fontSize = 12.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        voiceActor.language?.let {
+            Text(
+                text = it,
+                color = Purple40,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun RelationCard(relation: com.anilite.data.RelatedAnime) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable { /* Navigate to related anime */ }
+    ) {
+        AsyncImage(
+            model = relation.img,
+            contentDescription = relation.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = relation.name,
+            color = Color.White,
+            fontSize = 12.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        relation.relationType?.let {
+            Text(
+                text = it,
+                color = Purple40,
+                fontSize = 10.sp
+            )
+        }
     }
 }
