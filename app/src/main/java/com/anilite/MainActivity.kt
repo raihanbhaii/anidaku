@@ -134,10 +134,12 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 val animeId = backStackEntry.arguments?.getInt("animeId") ?: -1
 
                 AnimeDetailScreen(
-                    animeId = animeId,                    // Fixed: changed from aniListId to animeId
+                    animeId = animeId,
                     onBack = { navController.popBackStack() },
                     onPlayEpisode = { episodeId, episodeTitle, episodeNumber ->
-                        onPlayEpisode(episodeId, "$episodeTitle - Episode $episodeNumber")
+                        // Fixed here: Combine title + episode number into one String
+                        val fullTitle = "$episodeTitle - Episode $episodeNumber"
+                        onPlayEpisode(episodeId, fullTitle)
                     }
                 )
             }
