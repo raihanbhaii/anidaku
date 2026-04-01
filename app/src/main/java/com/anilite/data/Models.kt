@@ -13,7 +13,7 @@ data class EpisodeCount(
 // ── Home ──────────────────────────────────────────────────────────────────
 
 data class HomeResponse(
-    @SerializedName("spotlightAnimes")    val spotlightAnimes:    List<SpotlightAnime> = emptyList(),
+    @SerializedName("spotLightAnimes") val spotlightAnimes: List<SpotlightAnime> = emptyList(),
     @SerializedName("trendingAnimes")     val trendingAnimes:     List<BasicAnime>     = emptyList(),
     @SerializedName("latestEpisodes")     val latestEpisodes:     List<AnimeItem>      = emptyList(),
     @SerializedName("top10Animes")        val top10Animes:        Top10Animes?         = null,
