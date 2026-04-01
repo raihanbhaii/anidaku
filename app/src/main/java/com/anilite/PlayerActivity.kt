@@ -34,17 +34,19 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
 import com.anilite.ui.theme.AnidakuTheme
 import com.anilite.ui.theme.Purple40
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
 
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility = (
             android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
             android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
             android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         )
+
         val episodeId = intent.getStringExtra("episodeId") ?: ""
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
 
@@ -63,18 +65,40 @@ class PlayerActivity : ComponentActivity() {
 @SuppressLint("SetJavaScriptEnabled")
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
+fun PlayerScreen(
+    episodeId: String,
+    episodeTitle: String,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
+
     var category by remember { mutableStateOf("sub") }
     var streamUrl by remember { mutableStateOf<String?>(null) }
     var isExtracting by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(true) }
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    val embedUrl = "https://megaplay.buzz/stream/s-2/$episodeId/$category"
+    val embedUrl = remember(episodeId, category) {
+        "https://megaplay.buzz/stream/s-2/$episodeId/$category"
+    }
 
-    // Hidden WebView to intercept m3u8
+    // Timeout: Show error if no m3u8 found in 15 seconds
+    LaunchedEffect(episodeId, category) {
+        streamUrl = null
+        isExtracting = true
+        error = null
+
+        delay(15000)
+
+        if (streamUrl == null && isExtracting) {
+            isExtracting = false
+            error = "Stream not found. Try switching SUB/DUB or retry."
+        }
+    }
+
+    // Hidden WebView to intercept .m3u8 stream
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
@@ -85,6 +109,7 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36"
                 }
+
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: WebView,
@@ -98,30 +123,36 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                         return super.shouldInterceptRequest(view, request)
                     }
                 }
+
                 webChromeClient = WebChromeClient()
                 visibility = android.view.View.GONE
+
                 loadUrl(embedUrl)
+                webViewRef = this
             }
         },
         update = { webView ->
             webView.loadUrl(embedUrl)
+            webViewRef = webView
         },
         modifier = Modifier.size(1.dp)
     )
 
-    // Auto hide controls
+    // Cleanup WebView when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.stopLoading()
+            webViewRef?.destroy()
+            webViewRef = null
+        }
+    }
+
+    // Auto hide controls after 4 seconds
     LaunchedEffect(showControls) {
         if (showControls) {
             delay(4000)
             showControls = false
         }
-    }
-
-    // Reset when category changes
-    LaunchedEffect(category) {
-        streamUrl = null
-        isExtracting = true
-        error = null
     }
 
     Box(
@@ -139,11 +170,7 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                     CircularProgressIndicator(color = Purple40, strokeWidth = 3.dp)
                     Spacer(Modifier.height(12.dp))
                     Text("Loading stream...", color = Color.White, fontSize = 13.sp)
-                    Text(
-                        "Fetching from server",
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
+                    Text("Fetching from megaplay.buzz", color = Color.Gray, fontSize = 11.sp)
                 }
             }
 
@@ -154,13 +181,32 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                 ) {
                     Text("⚠️", fontSize = 40.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = Color.White, fontSize = 13.sp)
-                    Spacer(Modifier.height(16.dp))
+                    Text(error!!, color = Color.White, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // SUB / DUB buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("sub", "dub").forEach { cat ->
+                            Button(
+                                onClick = { category = cat },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (category == cat) Purple40 else Color.Gray
+                                )
+                            ) {
+                                Text(cat.uppercase())
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
                     Button(
                         onClick = {
                             streamUrl = null
                             isExtracting = true
                             error = null
+                            webViewRef?.reload()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Purple40)
                     ) {
@@ -179,12 +225,15 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36"
                             )
                         )
+
                     ExoPlayer.Builder(context).build().apply {
                         val source = HlsMediaSource.Factory(dataSourceFactory)
                             .createMediaSource(MediaItem.fromUri(streamUrl!!))
+
                         setMediaSource(source)
                         prepare()
                         playWhenReady = true
+
                         addListener(object : Player.Listener {
                             override fun onIsPlayingChanged(playing: Boolean) {
                                 isPlaying = playing
@@ -197,7 +246,7 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                     onDispose { player.release() }
                 }
 
-                // ExoPlayer view
+                // ExoPlayer View
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
@@ -208,14 +257,14 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Custom controls overlay
+                // Custom Controls Overlay
                 if (showControls) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color(0x88000000))
                     ) {
-                        // Top bar
+                        // Top Bar
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -224,18 +273,19 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = onBack) {
-                                Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+                                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    episodeTitle,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1
-                                )
-                            }
-                            // Sub/Dub toggle
+
+                            Text(
+                                text = episodeTitle,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                            )
+
+                            // Sub/Dub Toggle
                             Row(
                                 modifier = Modifier
                                     .background(Color(0xFF1C1C28), RoundedCornerShape(20.dp))
@@ -262,7 +312,7 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                             Spacer(Modifier.width(8.dp))
                         }
 
-                        // Center playback controls
+                        // Center Playback Controls
                         Row(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -272,13 +322,9 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                                 onClick = { player.seekBack() },
                                 modifier = Modifier.size(52.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Replay10,
-                                    null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
+                                Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(36.dp))
                             }
+
                             IconButton(
                                 onClick = {
                                     if (player.isPlaying) player.pause() else player.play()
@@ -294,20 +340,16 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
+
                             IconButton(
                                 onClick = { player.seekForward() },
                                 modifier = Modifier.size(52.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Forward10,
-                                    null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
+                                Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(36.dp))
                             }
                         }
 
-                        // Progress bar at bottom
+                        // Bottom Progress Bar
                         var progress by remember { mutableStateOf(0f) }
                         var duration by remember { mutableStateOf(0L) }
 
@@ -339,6 +381,7 @@ fun PlayerScreen(episodeId: String, episodeTitle: String, onBack: () -> Unit) {
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -368,6 +411,7 @@ fun formatTime(ms: Long): String {
     val hours = totalSec / 3600
     val minutes = (totalSec % 3600) / 60
     val seconds = totalSec % 60
+
     return if (hours > 0) {
         "%d:%02d:%02d".format(hours, minutes, seconds)
     } else {
