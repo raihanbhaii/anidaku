@@ -53,7 +53,7 @@ fun AnimeDetailScreen(
             anime = AniListRepository.getDetail(aniListId)
 
             // 2. If no aniwatchId passed, search old API by title
-            if (resolvedAniwatchId == null) {
+            if (resolvedAniwatchId == null && anime != null) {
                 try {
                     val searchResult = RetrofitClient.api.search(
                         query = anime?.title ?: "",
@@ -63,9 +63,9 @@ fun AnimeDetailScreen(
                 } catch (_: Exception) {}
             }
 
-            // 3. Get episodes from old API
+            // 3. Get episodes from old API - FIXED: removed .episodes
             resolvedAniwatchId?.let { slug ->
-                episodes = AniListRepository.getEpisodes(slug).episodes
+                episodes = AniListRepository.getEpisodes(slug)
             }
 
             inWatchlist = WatchlistManager.isInWatchlist(context, aniListId.toString())
@@ -127,7 +127,7 @@ fun AnimeDetailScreen(
                                     id = aniListId.toString(),
                                     name = info.title,
                                     img = info.coverImage,
-                                    type = info.format
+                                    type = info.format ?: "TV"
                                 )
                             )
                         }
@@ -154,7 +154,10 @@ fun AnimeDetailScreen(
                 )
                 Spacer(Modifier.height(4.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     info.averageScore?.let { StatChip("⭐ ${it / 10.0}") }
                     info.format?.let { StatChip(it) }
                     info.duration?.let { StatChip("${it}m") }
@@ -198,7 +201,7 @@ fun AnimeDetailScreen(
                 info.description?.takeIf { it.isNotEmpty() }?.let { desc ->
                     var expanded by remember { mutableStateOf(false) }
                     Text(
-                        text = desc,
+                        text = desc.replace("<br>", "\n").replace("<[^>]*>".toRegex(), ""),
                         color = Color(0xFFB0B0C0),
                         fontSize = 12.sp,
                         maxLines = if (expanded) Int.MAX_VALUE else 3,
@@ -233,12 +236,12 @@ fun AnimeDetailScreen(
             }
         }
 
-        items(episodes, key = { it.episodeId.ifEmpty { it.episodeNo.toString() } }) { ep ->
+        items(episodes, key = { it.id }) { ep ->
             EpisodeRow(
                 episode = ep,
                 onClick = {
                     resolvedAniwatchId?.let { slug ->
-                        onPlayEpisode(slug, ep.episodeId, "Episode ${ep.episodeNo}")
+                        onPlayEpisode(slug, ep.id, "Episode ${ep.number}")
                     }
                 }
             )
@@ -276,7 +279,7 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "${episode.episodeNo}",
+                text = "${episode.number}",
                 color = Purple40,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -285,13 +288,13 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.name ?: "Episode ${episode.episodeNo}",
+                text = episode.title ?: "Episode ${episode.number}",
                 color = Color.White,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (episode.filler) {
+            if (episode.isFiller) {
                 Text("Filler", color = Color(0xFFFF6B6B), fontSize = 10.sp)
             }
         }
