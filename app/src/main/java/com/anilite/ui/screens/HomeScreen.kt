@@ -1,5 +1,8 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package com.anilite.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,7 +37,6 @@ import kotlinx.coroutines.launch
 fun HomeScreen(onAnimeClick: (String) -> Unit) {
     var homeData by remember { mutableStateOf<HomeData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         try {
@@ -60,7 +62,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             .verticalScroll(rememberScrollState())
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // App bar
         Text(
             text = "Anidaku",
             color = Purple40,
@@ -69,29 +70,21 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             modifier = Modifier.padding(16.dp)
         )
 
-        // Spotlight carousel
         homeData?.spotlightAnimes?.takeIf { it.isNotEmpty() }?.let { spotlights ->
             SpotlightCarousel(spotlights = spotlights, onAnimeClick = onAnimeClick)
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Trending
         homeData?.trendingAnimes?.takeIf { it.isNotEmpty() }?.let {
             AnimeRow(title = "Trending", animes = it, onAnimeClick = onAnimeClick)
         }
-
-        // Latest Episodes
         homeData?.latestEpisodeAnimes?.takeIf { it.isNotEmpty() }?.let {
             AnimeRow(title = "Latest Episodes", animes = it, onAnimeClick = onAnimeClick)
         }
-
-        // Top Airing
         homeData?.topAiringAnimes?.takeIf { it.isNotEmpty() }?.let {
             AnimeRow(title = "Top Airing", animes = it, onAnimeClick = onAnimeClick)
         }
-
-        // Most Popular
         homeData?.mostPopularAnimes?.takeIf { it.isNotEmpty() }?.let {
             AnimeRow(title = "Most Popular", animes = it, onAnimeClick = onAnimeClick)
         }
@@ -100,6 +93,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -> Unit) {
     val pagerState = rememberPagerState { spotlights.size }
@@ -174,7 +168,6 @@ fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -
             }
         }
 
-        // Dots indicator
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
