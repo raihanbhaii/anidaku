@@ -124,17 +124,16 @@ fun AnidakuApp(
                 route = "detail/{animeId}",
                 arguments = listOf(
                     navArgument("animeId") {
-                        type = NavType.IntType
-                        defaultValue = -1
+                        type = NavType.StringType
+                        defaultValue = "-1"
                     }
                 )
             ) { backStackEntry ->
-                val animeId = backStackEntry.arguments?.getInt("animeId") ?: -1
+                val animeId = backStackEntry.arguments?.getString("animeId") ?: "-1"
 
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
-                    // FIXED: Match the exact signature that AnimeDetailScreen expects
                     onPlayEpisode = { episodeId: String, episodeTitle: String, episodeNumber: Int ->
                         val fullTitle = "$episodeTitle - Episode $episodeNumber"
                         onPlayEpisode(episodeId, fullTitle)
