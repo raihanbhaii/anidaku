@@ -25,36 +25,35 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.anilite.data.AniwatchAnime
-import com.anilite.data.AniwatchRepository
+import com.anilite.data.AniApiService
+import com.anilite.data.SearchResponse
 import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (Aniwatch ID)
+fun SearchScreen(onAnimeClick: (String) -> Unit) {   // Receives Aniwatch ID as String
     var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<AniwatchAnime>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<SearchResponse?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    var isSearching by remember { mutableStateOf(false) }
-
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
 
-    // Perform search using your Aniwatch API
+    // Perform search with debounce
     suspend fun performSearch(query: String) {
-        if (query.isBlank()) return
+        if (query.isBlank()) {
+            searchResults = null
+            return
+        }
 
         isLoading = true
         try {
-            // Call your new API: /aniwatch/search?keyword=...
-            val result = AniwatchRepository.searchAnime(query)
-            searchResults = result.animes   // adjust if response structure differs
-            isSearching = false
+            val result = AniApiService.searchAnime(query)
+            searchResults = result
         } catch (e: Exception) {
             e.printStackTrace()
-            searchResults = emptyList()
+            searchResults = null
         } finally {
             isLoading = false
         }
@@ -76,26 +75,21 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
         ) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    if (it.isNotEmpty()) {
-                        isSearching = true
+                onValueChange = { newQuery ->
+                    searchQuery = newQuery
+                    if (newQuery.isNotEmpty()) {
                         scope.launch {
                             delay(500) // Debounce
-                            if (searchQuery == it) {
-                                performSearch(it)
+                            if (searchQuery == newQuery) {
+                                performSearch(newQuery)
                             }
                         }
                     } else {
-                        isSearching = false
-                        searchResults = emptyList()
+                        searchResults = null
                     }
                 },
                 placeholder = {
-                    Text(
-                        text = "Search anime...",
-                        color = Color.Gray
-                    )
+                    Text("Search anime...", color = Color.Gray)
                 },
                 leadingIcon = {
                     Icon(
@@ -112,9 +106,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
                     cursorColor = Purple40
                 ),
                 shape = RoundedCornerShape(12.dp),
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search
-                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(
                     onSearch = {
                         focusManager.clearFocus()
@@ -126,7 +118,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
             )
         }
 
-        // Content
+        // Content Area
         when {
             isLoading -> {
                 Box(
@@ -137,27 +129,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
                 }
             }
 
-            isSearching && searchResults.isEmpty() -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            color = Purple40,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Searching for \"$searchQuery\"...",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            }
-
-            searchResults.isNotEmpty() -> {
+            searchResults?.animes?.isNotEmpty() == true -> {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(16.dp),
@@ -165,11 +137,11 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(searchResults, key = { it.id }) { anime ->
+                    items(searchResults!!.animes, key = { it.id }) { anime ->
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onAnimeClick(anime.id) }   // Pass String ID
+                                .clickable { onAnimeClick(anime.id) }
                         ) {
                             AsyncImage(
                                 model = anime.img,
@@ -206,7 +178,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
                 }
             }
 
-            searchQuery.isNotEmpty() && !isSearching && searchResults.isEmpty() -> {
+            searchQuery.isNotEmpty() && !isLoading && (searchResults?.animes?.isEmpty() == true) -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -220,6 +192,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // ← Changed to String (A
             }
 
             else -> {
+                // Default empty state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
