@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
+fun SearchScreen(onAnimeClick: (aniListId: Int) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -167,7 +167,7 @@ fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onAnimeClick(anime.id, null) }
+                                .clickable { onAnimeClick(anime.id) }
                         ) {
                             AsyncImage(
                                 model = anime.coverImage,
