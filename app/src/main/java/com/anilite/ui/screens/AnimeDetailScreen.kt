@@ -306,7 +306,7 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.name ?: "Episode ${episodNo}",
+                text = episode.name ?: "Episode ${episodeNo}",
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
