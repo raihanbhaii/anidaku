@@ -179,16 +179,14 @@ fun AnimeDetailScreen(
         }
 
         items(episodes, key = { it.episodeId ?: it.number ?: 0 }) { ep ->
-            EpisodeItem(
-                episode = ep,
-                onClick = {
-                    ep.episodeId?.let { epId ->
-                        val epNumber = epId.substringAfterLast("ep=")
-                        onPlayEpisode(animeId, epNumber)
-                    }
-                }
-            )
+           EpisodeItem(
+    episode = ep,
+    onClick = {
+        ep.epNumericId?.let { numId ->
+            onPlayEpisode(animeId, numId)
         }
+    }
+)
 
         item { Spacer(Modifier.height(80.dp)) }
     }
