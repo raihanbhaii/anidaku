@@ -30,7 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (aniwatch id) instead of Int
+fun HomeScreen(onAnimeClick: (String) -> Unit) {   // String = Aniwatch ID
     var homeData by remember { mutableStateOf<HomeResponse?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf("") }
@@ -42,7 +42,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (ani
         try {
             homeData = AniwatchRepository.getHome()
         } catch (e: Exception) {
-            errorMsg = e::class.simpleName + ": " + (e.message ?: "unknown error")
+            errorMsg = "${e::class.simpleName}: ${e.message ?: "unknown error"}"
             e.printStackTrace()
         } finally {
             isLoading = false
@@ -90,10 +90,10 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (ani
 
         val data = homeData ?: return@Column
 
-        // Spotlight Carousel (using spotlightAnimes)
-        if (data.spotlightAnimes.isNotEmpty()) {
+        // Spotlight Carousel
+        if (data.spotLightAnimes.isNotEmpty()) {
             SpotlightCarousel(
-                animes = data.spotlightAnimes.take(10),
+                animes = data.spotLightAnimes.take(10),
                 onAnimeClick = onAnimeClick
             )
             Spacer(Modifier.height(16.dp))
@@ -104,7 +104,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (ani
             AniwatchAnimeRow(title = "Trending", animes = data.trendingAnimes, onAnimeClick = onAnimeClick)
         }
 
-        // Top Airing (from featured)
+        // Currently Airing (Top Airing)
         data.featuredAnimes?.topAiringAnimes?.let {
             if (it.isNotEmpty()) {
                 AniwatchAnimeRow(title = "Currently Airing", animes = it, onAnimeClick = onAnimeClick)
@@ -123,7 +123,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (ani
             AniwatchAnimeRow(title = "Upcoming", animes = data.topUpcomingAnimes, onAnimeClick = onAnimeClick)
         }
 
-        if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() &&
+        if (data.spotLightAnimes.isEmpty() && data.trendingAnimes.isEmpty() && 
             data.topUpcomingAnimes.isEmpty() && errorMsg.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -140,7 +140,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {   // ← Now passes String (ani
     }
 }
 
-// Spotlight Carousel - Updated for new model (no bannerImage, using img)
+// Spotlight Carousel
 @Composable
 fun SpotlightCarousel(animes: List<AniwatchAnime>, onAnimeClick: (String) -> Unit) {
     if (animes.isEmpty()) return
@@ -189,21 +189,16 @@ fun SpotlightCarousel(animes: List<AniwatchAnime>, onAnimeClick: (String) -> Uni
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val info = listOfNotNull(
-                        anime.category,
-                        anime.duration,
-                        anime.quality
-                    ).take(3)
+                    val info = listOfNotNull(anime.category, anime.duration, anime.quality).take(3)
                     if (info.isNotEmpty()) {
                         Text(text = info.joinToString(" • "), color = Color(0xFFB0B0C0), fontSize = 11.sp)
                     }
                 }
 
-                // Episode info
-                anime.episodes?.sub?.let { subCount ->
-                    if (subCount > 0) {
+                anime.episodes?.eps?.let { eps ->
+                    if (eps > 0) {
                         Text(
-                            text = "Ep $subCount",
+                            text = "Ep $eps",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -218,7 +213,6 @@ fun SpotlightCarousel(animes: List<AniwatchAnime>, onAnimeClick: (String) -> Uni
             }
         }
 
-        // Dots indicator
         if (animes.size > 1) {
             Row(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
@@ -237,7 +231,7 @@ fun SpotlightCarousel(animes: List<AniwatchAnime>, onAnimeClick: (String) -> Uni
     }
 }
 
-// Updated Row and Card
+// Anime Row
 @Composable
 fun AniwatchAnimeRow(
     title: String,
@@ -265,6 +259,7 @@ fun AniwatchAnimeRow(
     }
 }
 
+// Anime Card
 @Composable
 fun AniwatchAnimeCard(anime: AniwatchAnime, onClick: () -> Unit) {
     Column(
@@ -290,9 +285,9 @@ fun AniwatchAnimeCard(anime: AniwatchAnime, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis
         )
 
-        anime.episodes?.sub?.let { sub ->
-            if (sub > 0) {
-                Text(text = "Ep $sub", color = Purple40, fontSize = 10.sp)
+        anime.episodes?.eps?.let { eps ->
+            if (eps > 0) {
+                Text(text = "Ep $eps", color = Purple40, fontSize = 10.sp)
             }
         }
     }
