@@ -7,14 +7,15 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.seconds   // ← This is the correct import (added at top)
 
 object NetworkClient {
 
     private val jsonConfiguration = Json {
-        ignoreUnknownKeys = true      // Prevents crashes from unknown fields
-        isLenient = true              // Allows minor JSON format issues
-        coerceInputValues = true      // Helps with type coercion
-        prettyPrint = false           // Set to false in production (true only for debugging)
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+        prettyPrint = false
     }
 
     val client: HttpClient by lazy {
@@ -24,18 +25,15 @@ object NetworkClient {
             }
 
             install(Logging) {
-                level = LogLevel.BODY     // Good for debugging API responses
+                level = LogLevel.BODY
             }
 
-            // Optional but recommended: Timeouts
+            // Timeouts - Fixed correctly
             engine {
                 config {
-                    import kotlin.time.Duration.Companion.seconds   // ← Add this at the top if not already there
-
-// Then change the timeouts like this:
-.connectTimeout(30.seconds)
-.readTimeout(30.seconds)
-.writeTimeout(30.seconds)
+                    connectTimeout(30.seconds)
+                    readTimeout(30.seconds)
+                    writeTimeout(30.seconds)
                 }
             }
         }
