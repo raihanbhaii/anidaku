@@ -54,12 +54,8 @@ fun AnimeDetailScreen(
         errorMsg = ""
 
         try {
-            // Fetch Anime Details
             animeDetail = repository.getAnimeDetails(animeId)
-
-            // Fetch Episodes
             episodesResponse = repository.getEpisodes(animeId)
-
             inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
             errorMsg = "Failed to load anime: ${e.message ?: e::class.simpleName}"
@@ -237,7 +233,6 @@ fun AnimeDetailScreen(
                         EpisodeItem(
                             episode = ep,
                             onClick = {
-                                // TODO: Improve this URL once we see real episodeId format
                                 val playerUrl = "https://megaplay.buzz/stream/s-2/${ep.episodeId}/sub"
                                 onPlayEpisode(
                                     playerUrl,
@@ -280,7 +275,7 @@ fun AnimeDetailScreen(
     }
 }
 
-// Episode Item
+// Episode Item - FIXED
 @Composable
 fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
     Row(
@@ -306,7 +301,7 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.name ?: "Episode ${episodeNo}",
+                text = episode.name ?: "Episode ${episode.episodeNo}",
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
