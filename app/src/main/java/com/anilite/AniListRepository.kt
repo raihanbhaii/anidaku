@@ -1,229 +1,342 @@
 package com.anilite.data
 
-import org.json.JSONObject
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 object AniListRepository {
+    private const val TAG = "AniListRepository"
+    private const val GRAPHQL_URL = "https://graphql.anilist.co"
 
-    // ── Fragments ────────────────────────────────────────────────────────
-
-    private val MEDIA_FIELDS = """
-        id
-        idMal
-        title { romaji english }
-        coverImage { extraLarge large }
-        bannerImage
-        description(asHtml: false)
-        genres
-        averageScore
-        status
-        format
-        episodes
-        duration
-        season
-        seasonYear
-        studios(isMain: true) { nodes { name } }
-        nextAiringEpisode { episode airingAt }
-        startDate { year month day }
-        endDate { year month day }
-        popularity
-        favourites
-        isAdult
-    """.trimIndent()
-
-    // ── Home ─────────────────────────────────────────────────────────────
-
-    suspend fun getTrending(page: Int = 1): AniListSearchResult {
-        val query = """
-            query (${'$'}page: Int) {
-              Page(page: ${'$'}page, perPage: 20) {
-                pageInfo { hasNextPage currentPage lastPage }
-                media(sort: TRENDING_DESC, type: ANIME, isAdult: false) {
-                  $MEDIA_FIELDS
+    suspend fun getTrending(): AniListResponse? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+                query {
+                    Page(page: 1, perPage: 20) {
+                        media(sort: TRENDING_DESC, type: ANIME, isAdult: false) {
+                            id
+                            title {
+                                romaji
+                                english
+                                userPreferred
+                            }
+                            coverImage {
+                                large
+                                extraLarge
+                            }
+                            bannerImage
+                            format
+                            status
+                            duration
+                            episodes
+                            nextAiringEpisode {
+                                episode
+                                airingAt
+                            }
+                        }
+                    }
                 }
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("page" to page))
-        return parseSearchResult(data.getJSONObject("Page"))
-    }
-
-    suspend fun getPopular(page: Int = 1): AniListSearchResult {
-        val query = """
-            query (${'$'}page: Int) {
-              Page(page: ${'$'}page, perPage: 20) {
-                pageInfo { hasNextPage currentPage lastPage }
-                media(sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
-                  $MEDIA_FIELDS
-                }
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("page" to page))
-        return parseSearchResult(data.getJSONObject("Page"))
-    }
-
-    suspend fun getAiring(page: Int = 1): AniListSearchResult {
-        val query = """
-            query (${'$'}page: Int) {
-              Page(page: ${'$'}page, perPage: 20) {
-                pageInfo { hasNextPage currentPage lastPage }
-                media(status: RELEASING, sort: TRENDING_DESC, type: ANIME, isAdult: false) {
-                  $MEDIA_FIELDS
-                }
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("page" to page))
-        return parseSearchResult(data.getJSONObject("Page"))
-    }
-
-    suspend fun getUpcoming(page: Int = 1): AniListSearchResult {
-        val query = """
-            query (${'$'}page: Int) {
-              Page(page: ${'$'}page, perPage: 20) {
-                pageInfo { hasNextPage currentPage lastPage }
-                media(status: NOT_YET_RELEASED, sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
-                  $MEDIA_FIELDS
-                }
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("page" to page))
-        return parseSearchResult(data.getJSONObject("Page"))
-    }
-
-    // ── Search ────────────────────────────────────────────────────────────
-
-    suspend fun search(keyword: String, page: Int = 1): AniListSearchResult {
-        val query = """
-            query (${'$'}search: String, ${'$'}page: Int) {
-              Page(page: ${'$'}page, perPage: 20) {
-                pageInfo { hasNextPage currentPage lastPage }
-                media(search: ${'$'}search, type: ANIME, isAdult: false) {
-                  $MEDIA_FIELDS
-                }
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("search" to keyword, "page" to page))
-        return parseSearchResult(data.getJSONObject("Page"))
-    }
-
-    // ── Detail ────────────────────────────────────────────────────────────
-
-    suspend fun getDetail(aniListId: Int): AniListAnime? {
-        val query = """
-            query (${'$'}id: Int) {
-              Media(id: ${'$'}id, type: ANIME) {
-                $MEDIA_FIELDS
-              }
-            }
-        """.trimIndent()
-        val data = AniListClient.query(query, mapOf("id" to aniListId))
-        return if (data.has("Media")) parseMedia(data.getJSONObject("Media")) else null
-    }
-
-    // ── Old API: episodes aired so far ────────────────────────────────────
-    // Uses your existing RetrofitClient — only for episode list + aired count
-
-    suspend fun getEpisodes(aniwatchId: String): EpisodesResponse {
-        return try {
-            RetrofitClient.api.getEpisodes(aniwatchId)
+            """
+            
+            val response = executeGraphQLQuery(query)
+            Log.d(TAG, "Trending response: ${response?.animes?.size ?: 0} items")
+            response
         } catch (e: Exception) {
-            EpisodesResponse()
-        }
-    }
-
-    // ── Old API: get al_id from anime detail ──────────────────────────────
-    // We use this to get the AniList ID from an aniwatch anime slug
-
-    suspend fun getAlId(aniwatchId: String): Int? {
-        return try {
-            val detail = RetrofitClient.api.getAnimeDetail(aniwatchId)
-            val alId = detail.info?.alId ?: 0
-            if (alId > 0) alId else null
-        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching trending", e)
             null
         }
     }
 
-    // ── Parsers ───────────────────────────────────────────────────────────
-
-    private fun parseSearchResult(page: JSONObject): AniListSearchResult {
-        val pageInfo = page.getJSONObject("pageInfo")
-        val mediaArray = page.getJSONArray("media")
-        val animes = (0 until mediaArray.length()).mapNotNull {
-            try { parseMedia(mediaArray.getJSONObject(it)) } catch (e: Exception) { null }
+    suspend fun getAiring(): AniListResponse? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+                query {
+                    Page(page: 1, perPage: 20) {
+                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false, status: RELEASING) {
+                            id
+                            title {
+                                romaji
+                                english
+                                userPreferred
+                            }
+                            coverImage {
+                                large
+                                extraLarge
+                            }
+                            bannerImage
+                            format
+                            status
+                            duration
+                            episodes
+                            nextAiringEpisode {
+                                episode
+                                airingAt
+                            }
+                        }
+                    }
+                }
+            """
+            
+            executeGraphQLQuery(query)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching airing", e)
+            null
         }
-        return AniListSearchResult(
-            animes = animes,
-            hasNextPage = pageInfo.optBoolean("hasNextPage", false),
-            currentPage = pageInfo.optInt("currentPage", 1),
-            totalPages = pageInfo.optInt("lastPage", 1)
-        )
     }
 
-    fun parseMedia(m: JSONObject): AniListAnime {
-        val title = m.getJSONObject("title")
-        val coverImage = m.getJSONObject("coverImage")
-        val studiosObj = m.optJSONObject("studios")
-        val studios = studiosObj?.optJSONArray("nodes")?.let { nodes ->
-            (0 until nodes.length()).map { nodes.getJSONObject(it).optString("name", "") }
-        } ?: emptyList()
-
-        val nextAiring = m.optJSONObject("nextAiringEpisode")?.let {
-            NextAiring(
-                episode = it.optInt("episode"),
-                airingAt = it.optLong("airingAt")
-            )
+    suspend fun getPopular(): AniListResponse? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+                query {
+                    Page(page: 1, perPage: 20) {
+                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+                            id
+                            title {
+                                romaji
+                                english
+                                userPreferred
+                            }
+                            coverImage {
+                                large
+                                extraLarge
+                            }
+                            bannerImage
+                            format
+                            status
+                            duration
+                            episodes
+                            nextAiringEpisode {
+                                episode
+                                airingAt
+                            }
+                        }
+                    }
+                }
+            """
+            
+            executeGraphQLQuery(query)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching popular", e)
+            null
         }
+    }
 
-        val startDateObj = m.optJSONObject("startDate")
-        val endDateObj = m.optJSONObject("endDate")
+    suspend fun getUpcoming(): AniListResponse? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+                query {
+                    Page(page: 1, perPage: 20) {
+                        media(sort: POPULARITY_DESC, type: ANIME, isAdult: false, status: NOT_YET_RELEASED) {
+                            id
+                            title {
+                                romaji
+                                english
+                                userPreferred
+                            }
+                            coverImage {
+                                large
+                                extraLarge
+                            }
+                            bannerImage
+                            format
+                            status
+                            duration
+                            episodes
+                            nextAiringEpisode {
+                                episode
+                                airingAt
+                            }
+                        }
+                    }
+                }
+            """
+            
+            executeGraphQLQuery(query)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching upcoming", e)
+            null
+        }
+    }
 
-        val genresArray = m.optJSONArray("genres")
-        val genres = genresArray?.let {
-            (0 until it.length()).map { i -> it.optString(i) }
-        } ?: emptyList()
+    private fun executeGraphQLQuery(query: String): AniListResponse? {
+        val url = URL(GRAPHQL_URL)
+        val connection = url.openConnection() as HttpURLConnection
+        
+        try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            
+            val body = """{"query": "$query"}""".replace("\n", " ").replace("\"", "\\\"")
+            connection.outputStream.use { 
+                it.write(body.toByteArray())
+            }
+            
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val response = connection.inputStream.bufferedReader().readText()
+                Log.d(TAG, "Response: ${response.take(200)}...")
+                return parseAniListResponse(response)
+            } else {
+                Log.e(TAG, "HTTP Error: $responseCode")
+                return null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Network error", e)
+            return null
+        } finally {
+            connection.disconnect()
+        }
+    }
 
-        return AniListAnime(
-            id = m.optInt("id"),
-            malId = m.optInt("idMal").takeIf { it > 0 },
-            title = title.optString("english").takeIf { it.isNotEmpty() }
-                ?: title.optString("romaji", "Unknown"),
-            titleEnglish = title.optString("english").takeIf { it.isNotEmpty() },
-            coverImage = coverImage.optString("extraLarge").takeIf { it.isNotEmpty() }
-                ?: coverImage.optString("large", ""),
-            bannerImage = m.optString("bannerImage").takeIf { it.isNotEmpty() },
-            description = m.optString("description").takeIf { it.isNotEmpty() }
-                ?.replace(Regex("<[^>]*>"), ""), // strip HTML tags
-            genres = genres,
-            averageScore = m.optInt("averageScore").takeIf { it > 0 },
-            status = m.optString("status").takeIf { it.isNotEmpty() },
-            format = m.optString("format").takeIf { it.isNotEmpty() },
-            episodes = m.optInt("episodes").takeIf { it > 0 },
-            duration = m.optInt("duration").takeIf { it > 0 },
-            season = m.optString("season").takeIf { it.isNotEmpty() },
-            seasonYear = m.optInt("seasonYear").takeIf { it > 0 },
-            studios = studios,
-            nextAiringEpisode = nextAiring,
-            startDate = startDateObj?.let {
-                FuzzyDate(
-                    it.optInt("year").takeIf { y -> y > 0 },
-                    it.optInt("month").takeIf { mo -> mo > 0 },
-                    it.optInt("day").takeIf { d -> d > 0 }
+    private fun parseAniListResponse(json: String): AniListResponse? {
+        return try {
+            // Simple JSON parsing - you should use a proper JSON library like kotlinx.serialization or Gson
+            val animes = mutableListOf<AniListAnime>()
+            
+            // Extract media array from JSON
+            val mediaStart = json.indexOf("\"media\":[")
+            if (mediaStart != -1) {
+                var pos = mediaStart + 8
+                var bracketCount = 0
+                var inString = false
+                var escape = false
+                val mediaJson = StringBuilder()
+                
+                while (pos < json.length) {
+                    val char = json[pos]
+                    if (!inString && char == '[') bracketCount++
+                    if (!inString && char == ']') bracketCount--
+                    
+                    mediaJson.append(char)
+                    
+                    if (bracketCount == 0 && char == ']') {
+                        break
+                    }
+                    
+                    if (char == '"' && !escape) inString = !inString
+                    escape = if (char == '\\' && !escape) true else false
+                    pos++
+                }
+                
+                // Parse each anime in the array
+                val itemsJson = mediaJson.toString().removePrefix("[").removeSuffix("]").split("},{")
+                for (item in itemsJson) {
+                    val anime = parseAnimeJson("{$item}")
+                    if (anime != null) {
+                        animes.add(anime)
+                    }
+                }
+            }
+            
+            if (animes.isNotEmpty()) {
+                AniListResponse(animes)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Parse error", e)
+            null
+        }
+    }
+
+    private fun parseAnimeJson(json: String): AniListAnime? {
+        return try {
+            val id = extractInt(json, "\"id\":")
+            val title = extractTitle(json)
+            val coverImage = extractString(json, "\"large\":\"") ?: extractString(json, "\"extraLarge\":\"")
+            val bannerImage = extractString(json, "\"bannerImage\":\"")
+            val format = extractString(json, "\"format\":\"")
+            val status = extractString(json, "\"status\":\"")
+            val duration = extractInt(json, "\"duration\":")
+            val episodes = extractInt(json, "\"episodes\":")
+            
+            // Parse nextAiringEpisode if present
+            var nextAiringEpisode: NextAiringEpisode? = null
+            if (json.contains("\"nextAiringEpisode\":")) {
+                val episode = extractInt(json, "\"episode\":", json.indexOf("\"nextAiringEpisode\""))
+                val airingAt = extractLong(json, "\"airingAt\":", json.indexOf("\"nextAiringEpisode\""))
+                if (episode != null && airingAt != null) {
+                    nextAiringEpisode = NextAiringEpisode(episode, airingAt)
+                }
+            }
+            
+            if (id != null && title != null && coverImage != null) {
+                AniListAnime(
+                    id = id,
+                    title = title,
+                    coverImage = coverImage,
+                    bannerImage = bannerImage,
+                    format = format,
+                    status = status,
+                    duration = duration,
+                    episodes = episodes,
+                    nextAiringEpisode = nextAiringEpisode
                 )
-            },
-            endDate = endDateObj?.let {
-                FuzzyDate(
-                    it.optInt("year").takeIf { y -> y > 0 },
-                    it.optInt("month").takeIf { mo -> mo > 0 },
-                    it.optInt("day").takeIf { d -> d > 0 }
-                )
-            },
-            popularity = m.optInt("popularity").takeIf { it > 0 },
-            favourites = m.optInt("favourites").takeIf { it > 0 },
-            isAdult = m.optBoolean("isAdult", false)
-        )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing anime", e)
+            null
+        }
+    }
+
+    private fun extractInt(json: String, key: String, startPos: Int = 0): Int? {
+        val index = json.indexOf(key, startPos)
+        if (index == -1) return null
+        var pos = index + key.length
+        val numStr = StringBuilder()
+        while (pos < json.length && json[pos].isDigit()) {
+            numStr.append(json[pos])
+            pos++
+        }
+        return if (numStr.isNotEmpty()) numStr.toString().toIntOrNull() else null
+    }
+
+    private fun extractLong(json: String, key: String, startPos: Int = 0): Long? {
+        val index = json.indexOf(key, startPos)
+        if (index == -1) return null
+        var pos = index + key.length
+        val numStr = StringBuilder()
+        while (pos < json.length && json[pos].isDigit()) {
+            numStr.append(json[pos])
+            pos++
+        }
+        return if (numStr.isNotEmpty()) numStr.toString().toLongOrNull() else null
+    }
+
+    private fun extractString(json: String, key: String): String? {
+        val index = json.indexOf(key)
+        if (index == -1) return null
+        var pos = index + key.length
+        val str = StringBuilder()
+        var inString = true
+        var escape = false
+        
+        while (pos < json.length && inString) {
+            val char = json[pos]
+            if (char == '"' && !escape) {
+                inString = false
+            } else {
+                str.append(char)
+            }
+            escape = if (char == '\\' && !escape) true else false
+            pos++
+        }
+        return if (str.isNotEmpty()) str.toString() else null
+    }
+
+    private fun extractTitle(json: String): String? {
+        // Try to get userPreferred first, then english, then romaji
+        var title = extractString(json, "\"userPreferred\":\"")
+        if (title == null) title = extractString(json, "\"english\":\"")
+        if (title == null) title = extractString(json, "\"romaji\":\"")
+        return title
     }
 }
