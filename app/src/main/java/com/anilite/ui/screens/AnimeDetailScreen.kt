@@ -96,7 +96,8 @@ fun AnimeDetailScreen(
                     )
                 )
                 IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
-                    Icon(ArrowBack, null, tint = Color.White)
+                    // FIX: use full qualifier instead of bare ArrowBack
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
                 IconButton(
                     onClick = {
