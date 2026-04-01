@@ -36,7 +36,7 @@ import com.anilite.ui.theme.SurfaceVariant
 @Composable
 fun AnimeDetailScreen(
     aniListId: Int,
-    aniwatchId: String?,         // slug from old API e.g. "one-piece-100", may be null
+    aniwatchId: String?,
     onBack: () -> Unit,
     onPlayEpisode: (aniwatchId: String, episodeId: String, title: String) -> Unit
 ) {
@@ -52,9 +52,8 @@ fun AnimeDetailScreen(
             // 1. Get full detail from AniList
             anime = AniListRepository.getDetail(aniListId)
 
-            // 2. Resolve aniwatchId if not passed
-            // Try using malId to find matching aniwatch slug via search
-            if (resolvedAniwatchId == null && anime?.malId != null) {
+            // 2. If no aniwatchId passed, search old API by title
+            if (resolvedAniwatchId == null) {
                 try {
                     val searchResult = RetrofitClient.api.search(
                         query = anime?.title ?: "",
@@ -64,7 +63,7 @@ fun AnimeDetailScreen(
                 } catch (_: Exception) {}
             }
 
-            // 3. Get episodes from old API using aniwatch slug
+            // 3. Get episodes from old API
             resolvedAniwatchId?.let { slug ->
                 episodes = AniListRepository.getEpisodes(slug).episodes
             }
@@ -91,7 +90,6 @@ fun AnimeDetailScreen(
         return
     }
 
-    // Aired episodes: nextAiringEpisode.episode - 1, or total episodes if finished
     val airedEpisodes = info.nextAiringEpisode?.episode?.minus(1) ?: info.episodes
 
     LazyColumn(
@@ -155,15 +153,16 @@ fun AnimeDetailScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(4.dp))
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     info.averageScore?.let { StatChip("⭐ ${it / 10.0}") }
                     info.format?.let { StatChip(it) }
                     info.duration?.let { StatChip("${it}m") }
                     info.status?.let { StatChip(it.replace("_", " ")) }
                 }
+
                 Spacer(Modifier.height(6.dp))
 
-                // Aired episodes count — the key feature using old API data
                 airedEpisodes?.let {
                     Text(
                         text = "Episodes aired: $it" +
@@ -215,6 +214,7 @@ fun AnimeDetailScreen(
                 }
 
                 Spacer(Modifier.height(12.dp))
+
                 Text(
                     text = "Episodes (${episodes.size})",
                     color = Color.White,
@@ -246,4 +246,56 @@ fun AnimeDetailScreen(
 
         item { Spacer(Modifier.height(80.dp)) }
     }
+}
+
+@Composable
+fun StatChip(text: String) {
+    Text(
+        text = text,
+        color = Color.White,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .background(SurfaceVariant, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+    )
+}
+
+@Composable
+fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(SurfaceVariant, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "${episode.episodeNo}",
+                color = Purple40,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = episode.name ?: "Episode ${episode.episodeNo}",
+                color = Color.White,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (episode.filler) {
+                Text("Filler", color = Color(0xFFFF6B6B), fontSize = 10.sp)
+            }
+        }
+        Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(20.dp))
+    }
+    HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
 }
