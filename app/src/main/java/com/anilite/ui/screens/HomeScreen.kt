@@ -39,12 +39,25 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
 
     LaunchedEffect(Unit) {
         try {
-            trending = AniListRepository.getTrending().animes
-            airing   = AniListRepository.getAiring().animes
-            popular  = AniListRepository.getPopular().animes
-            upcoming = AniListRepository.getUpcoming().animes
+            val trendingResponse = AniListRepository.getTrending()
+            trending = trendingResponse?.animes ?: emptyList()
+            
+            val airingResponse = AniListRepository.getAiring()
+            airing = airingResponse?.animes ?: emptyList()
+            
+            val popularResponse = AniListRepository.getPopular()
+            popular = popularResponse?.animes ?: emptyList()
+            
+            val upcomingResponse = AniListRepository.getUpcoming()
+            upcoming = upcomingResponse?.animes ?: emptyList()
+            
         } catch (e: Exception) {
             e.printStackTrace()
+            // Set empty lists on error
+            trending = emptyList()
+            airing = emptyList()
+            popular = emptyList()
+            upcoming = emptyList()
         } finally {
             isLoading = false
         }
@@ -76,14 +89,39 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                 animes = trending.take(10),
                 onAnimeClick = { onAnimeClick(it.id, null) }
             )
+            Spacer(Modifier.height(16.dp))
         }
 
-        Spacer(Modifier.height(16.dp))
+        if (trending.isNotEmpty()) {
+            AniListAnimeRow(title = "Trending", animes = trending, onAnimeClick = { onAnimeClick(it.id, null) })
+        }
+        
+        if (airing.isNotEmpty()) {
+            AniListAnimeRow(title = "Currently Airing", animes = airing, onAnimeClick = { onAnimeClick(it.id, null) })
+        }
+        
+        if (popular.isNotEmpty()) {
+            AniListAnimeRow(title = "Most Popular", animes = popular, onAnimeClick = { onAnimeClick(it.id, null) })
+        }
+        
+        if (upcoming.isNotEmpty()) {
+            AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id, null) })
+        }
 
-        AniListAnimeRow(title = "Trending", animes = trending, onAnimeClick = { onAnimeClick(it.id, null) })
-        AniListAnimeRow(title = "Currently Airing", animes = airing, onAnimeClick = { onAnimeClick(it.id, null) })
-        AniListAnimeRow(title = "Most Popular", animes = popular, onAnimeClick = { onAnimeClick(it.id, null) })
-        AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id, null) })
+        // Show message if all lists are empty
+        if (trending.isEmpty() && airing.isEmpty() && popular.isEmpty() && upcoming.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No anime available\nCheck your internet connection",
+                    color = Color.Gray,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
 
         Spacer(Modifier.height(80.dp))
     }
@@ -91,6 +129,8 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
 
 @Composable
 fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -> Unit) {
+    if (animes.isEmpty()) return
+    
     val pagerState = rememberPagerState { animes.size }
     val scope = rememberCoroutineScope()
 
@@ -111,7 +151,7 @@ fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -
                     .clickable { onAnimeClick(anime) }
             ) {
                 AsyncImage(
-                    model = anime.bannerImage ?: anime.coverImage,
+                    model = anime.bannerImage?.takeIf { it.isNotBlank() } ?: anime.coverImage,
                     contentDescription = anime.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -153,36 +193,40 @@ fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -
                     }
                 }
                 // aired episodes badge
-                val aired = anime.nextAiringEpisode?.episode?.minus(1) ?: anime.episodes
+                val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
                 aired?.let {
-                    Text(
-                        text = "Ep $it",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp)
-                            .background(Purple40, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    if (it > 0) {
+                        Text(
+                            text = "Ep $it",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
+                                .background(Purple40, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            animes.indices.forEach { i ->
-                Box(
-                    modifier = Modifier
-                        .size(if (i == pagerState.currentPage) 8.dp else 5.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(if (i == pagerState.currentPage) Purple40 else Color.Gray)
-                )
+        if (animes.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                animes.indices.forEach { i ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (i == pagerState.currentPage) 8.dp else 5.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (i == pagerState.currentPage) Purple40 else Color.Gray)
+                    )
+                }
             }
         }
     }
@@ -239,13 +283,15 @@ fun AniListAnimeCard(anime: AniListAnime, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis
         )
         // Show aired episodes count
-        val aired = anime.nextAiringEpisode?.episode?.minus(1) ?: anime.episodes
+        val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
         aired?.let {
-            Text(
-                text = "Ep $it aired",
-                color = Purple40,
-                fontSize = 10.sp
-            )
+            if (it > 0) {
+                Text(
+                    text = "Ep $it aired",
+                    color = Purple40,
+                    fontSize = 10.sp
+                )
+            }
         }
     }
 }
