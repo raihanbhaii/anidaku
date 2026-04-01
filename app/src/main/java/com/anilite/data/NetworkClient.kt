@@ -30,9 +30,12 @@ object NetworkClient {
             // Optional but recommended: Timeouts
             engine {
                 config {
-                    connectTimeout(30_000)   // 30 seconds
-                    readTimeout(30_000)
-                    writeTimeout(30_000)
+                    import kotlin.time.Duration.Companion.seconds   // ← Add this at the top if not already there
+
+// Then change the timeouts like this:
+.connectTimeout(30.seconds)
+.readTimeout(30.seconds)
+.writeTimeout(30.seconds)
                 }
             }
         }
