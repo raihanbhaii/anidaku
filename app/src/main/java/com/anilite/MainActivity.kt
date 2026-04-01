@@ -26,14 +26,16 @@ import com.anilite.ui.theme.Purple40
 import com.anilite.ui.theme.SurfaceVariant
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             AnidakuTheme {
                 AnidakuApp(
                     onPlayEpisode = { episodeId: String, episodeTitle: String ->
                         startActivity(
-                            Intent(this, PlayerActivity::class.java).apply {
+                            Intent(this@MainActivity, PlayerActivity::class.java).apply {
                                 putExtra("episodeId", episodeId)
                                 putExtra("episodeTitle", episodeTitle)
                             }
@@ -46,7 +48,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
+fun AnidakuApp(
+    onPlayEpisode: (String, String) -> Unit   // This expects (episodeId, fullTitle)
+) {
     val navController = rememberNavController()
 
     val bottomItems = listOf(
@@ -76,7 +80,7 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(icon, label) },
+                            icon = { Icon(icon, contentDescription = label) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Purple40,
@@ -136,8 +140,8 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = { episodeId, episodeTitle, episodeNumber ->
-                        // Fixed here: Combine title + episode number into one String
+                    onPlayEpisode = { episodeId: String, episodeTitle: String, episodeNumber: Int ->
+                        // Properly combine title and episode number into one String
                         val fullTitle = "$episodeTitle - Episode $episodeNumber"
                         onPlayEpisode(episodeId, fullTitle)
                     }
