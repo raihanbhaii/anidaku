@@ -32,7 +32,7 @@ data class SpotlightAnime(
     @SerializedName("quality")     val quality: String?    = null,
     @SerializedName("category")    val category: String?   = null,
     @SerializedName("releasedDay") val releasedDay: String? = null,
-    @SerializedName("descriptions") val descriptions: String? = null
+    @SerializedName("description") val description: String? = null  // ← fixed: was "descriptions"
 )
 
 // Generic anime card used in latest episodes, upcoming, recommended, etc.
@@ -103,10 +103,10 @@ data class AnimeInfo(
     @SerializedName("mal_id")      val malId: Int          = 0,
     @SerializedName("al_id")       val alId: Int           = 0,
     @SerializedName("name")        val name: String        = "",
-    @SerializedName("img")         val img: String         = "",  // ← NOT poster
+    @SerializedName("img")         val img: String         = "",
     @SerializedName("rating")      val rating: String      = "",
     @SerializedName("episodes")    val episodes: EpisodeCount? = null,
-    @SerializedName("category")    val category: String    = "",  // ← type/category
+    @SerializedName("category")    val category: String    = "",
     @SerializedName("quality")     val quality: String     = "",
     @SerializedName("duration")    val duration: String    = "",
     @SerializedName("description") val description: String = ""
@@ -120,9 +120,9 @@ data class AnimeMoreInfo(
     @SerializedName("Duration:")  val duration: String?       = null,
     @SerializedName("Status:")    val status: String?         = null,
     @SerializedName("MAL Score:") val malScore: String?       = null,
-    @SerializedName("Studios:")   val studios: List<String>   = emptyList(),
-    @SerializedName("Genres")     val genres: List<String>    = emptyList(),  // ← no colon
-    @SerializedName("Producers")  val producers: List<String> = emptyList()   // ← no colon
+    @SerializedName("Studios:")   val studios: String?        = null,  // ← fixed: was List<String>
+    @SerializedName("Genres")     val genres: List<String>    = emptyList(),
+    @SerializedName("Producers")  val producers: List<String> = emptyList()
 )
 
 data class AnimeSeason(
@@ -149,10 +149,10 @@ data class EpisodesResponse(
 )
 
 data class Episode(
-    @SerializedName("name")      val name: String?      = null,  // episode title
-    @SerializedName("episodeNo") val episodeNo: Int     = 0,     // ← NOT "number"
-    @SerializedName("episodeId") val episodeId: String  = "",    // "anime-id?ep=12345"
-    @SerializedName("filler")    val filler: Boolean    = false  // ← NOT "isFiller"
+    @SerializedName("name")      val name: String?      = null,
+    @SerializedName("episodeNo") val episodeNo: Int     = 0,
+    @SerializedName("episodeId") val episodeId: String  = "",
+    @SerializedName("filler")    val filler: Boolean    = false
 )
 
 // ── Servers ───────────────────────────────────────────────────────────────
@@ -195,6 +195,6 @@ data class Subtitle(
 data class WatchlistAnime(
     val id: String     = "",
     val name: String   = "",
-    val img: String    = "",   // ← was "poster", now matches API
+    val img: String    = "",
     val type: String?  = null
 )
