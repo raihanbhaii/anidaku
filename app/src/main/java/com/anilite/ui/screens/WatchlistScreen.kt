@@ -25,10 +25,11 @@ import com.anilite.ui.theme.CardBg
 import com.anilite.ui.theme.Purple40
 
 @Composable
-fun WatchlistScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
+fun WatchlistScreen(onAnimeClick: (aniListId: Int) -> Unit) {
     val context = LocalContext.current
     var watchlist by remember { mutableStateOf(WatchlistManager.getWatchlist(context)) }
 
+    // Refresh watchlist when screen is visible
     LaunchedEffect(Unit) {
         watchlist = WatchlistManager.getWatchlist(context)
     }
@@ -69,9 +70,11 @@ fun WatchlistScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit)
                             .clip(RoundedCornerShape(8.dp))
                             .background(CardBg)
                             .clickable {
-                                // id is stored as aniListId string e.g. "21"
-                                val aniListId = anime.id.toIntOrNull() ?: 0
-                                onAnimeClick(aniListId, null)
+                                // Convert stored ID string to Int (it's stored as aniListId string)
+                                val aniListId = anime.id.toIntOrNull()
+                                if (aniListId != null) {
+                                    onAnimeClick(aniListId)
+                                }
                             }
                     ) {
                         AsyncImage(
