@@ -31,13 +31,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             AnidakuTheme {
                 AnidakuApp(
-                    onPlayEpisode = { _, episodeId, episodeTitle ->
-    startActivity(
-        Intent(this, PlayerActivity::class.java).apply {
-            putExtra("episodeId", episodeId)
-            putExtra("episodeTitle", episodeTitle)
+                    onPlayEpisode = { episodeId: String, episodeTitle: String ->
+                        startActivity(
+                            Intent(this, PlayerActivity::class.java).apply {
+                                putExtra("episodeId", episodeId)
+                                putExtra("episodeTitle", episodeTitle)
+                            }
+                        )
+                    }
+                )
+            }
         }
-    )
+    }
 }
 
 @Composable
@@ -88,7 +93,9 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
         NavHost(
             navController = navController,
             startDestination = "home",
-            modifier = Modifier.padding(padding).fillMaxSize()
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
         ) {
             composable("home") {
                 HomeScreen(onAnimeClick = { navController.navigate("detail/$it") })
@@ -107,7 +114,7 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = onPlayEpisode
+                    onPlayEpisode = { _, epId, title -> onPlayEpisode(epId, title) }
                 )
             }
         }
