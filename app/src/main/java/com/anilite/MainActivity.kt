@@ -32,18 +32,12 @@ class MainActivity : ComponentActivity() {
             AnidakuTheme {
                 AnidakuApp(
                     onPlayEpisode = { episodeId: String, episodeTitle: String ->
-                        // For now, just show a message - you can add streaming later
-                        // startActivity(
-                        //     Intent(this, PlayerActivity::class.java).apply {
-                        //         putExtra("episodeId", episodeId)
-                        //         putExtra("episodeTitle", episodeTitle)
-                        //     }
-                        // )
-                        android.widget.Toast.makeText(
-                            this,
-                            "Streaming coming soon! Episode: $episodeTitle",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                        startActivity(
+                            Intent(this, PlayerActivity::class.java).apply {
+                                putExtra("episodeId", episodeId)
+                                putExtra("episodeTitle", episodeTitle)
+                            }
+                        )
                     }
                 )
             }
@@ -138,8 +132,8 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 AnimeDetailScreen(
                     aniListId = aniListId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = { _, episodeId, title ->
-                        onPlayEpisode(episodeId, title)
+                    onPlayEpisode = { episodeId, episodeTitle, episodeNumber ->
+                        onPlayEpisode(episodeId, "$episodeTitle - Episode $episodeNumber")
                     }
                 )
             }
