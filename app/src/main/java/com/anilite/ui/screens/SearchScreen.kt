@@ -15,11 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.anilite.data.AnimeItem
-import com.anilite.data.RetrofitClient
-import com.anilite.ui.components.AnimeCard
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import coil.compose.AsyncImage
+import com.anilite.data.AniListAnime
+import com.anilite.data.AniListRepository
 import com.anilite.ui.theme.Purple40
 import com.anilite.ui.theme.SurfaceVariant
 import kotlinx.coroutines.Job
@@ -33,10 +37,10 @@ val GENRES = listOf(
 )
 
 @Composable
-fun SearchScreen(onAnimeClick: (String) -> Unit) {
+fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
     var query by remember { mutableStateOf("") }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf<List<AnimeItem>>(emptyList()) }
+    var results by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var searchJob by remember { mutableStateOf<Job?>(null) }
@@ -52,8 +56,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
             isLoading = true
             try {
                 val searchQuery = if (query.isNotBlank()) query else selectedGenre ?: ""
-                val response = RetrofitClient.api.search(searchQuery) // ← no .data wrapper
-                results = response.animes                              // ← direct .animes
+                results = AniListRepository.search(searchQuery).animes
             } catch (e: Exception) {
                 e.printStackTrace()
                 results = emptyList()
@@ -135,14 +138,49 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(results, key = { it.id.ifEmpty { it.name } }) { anime ->  // ← no nullable
-                    AnimeCard(
+                items(results, key = { it.id }) { anime ->
+                    AniListSearchCard(
                         anime = anime,
-                        onClick = { if (anime.id.isNotEmpty()) onAnimeClick(anime.id) },
-                        modifier = Modifier.fillMaxWidth()
+                        onClick = { onAnimeClick(anime.id, null) }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AniListSearchCard(anime: AniListAnime, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = anime.coverImage,
+            contentDescription = anime.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = anime.title,
+            color = Color.White,
+            fontSize = 11.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        // Aired episodes count
+        val aired = anime.nextAiringEpisode?.episode?.minus(1) ?: anime.episodes
+        aired?.let {
+            Text(
+                text = "Ep $it",
+                color = Purple40,
+                fontSize = 10.sp
+            )
         }
     }
 }
