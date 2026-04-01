@@ -63,7 +63,7 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
             if (currentRoute?.startsWith("detail") == false) {
                 NavigationBar(
                     containerColor = SurfaceVariant,
-                    tonalElevation = 0.dp
+                    tonalElevation = androidx.compose.ui.unit.Dp.Hairline
                 ) {
                     bottomItems.forEach { (route, label, icon) ->
                         NavigationBarItem(
