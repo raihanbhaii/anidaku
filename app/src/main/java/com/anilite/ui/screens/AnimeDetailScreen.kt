@@ -64,11 +64,10 @@ fun AnimeDetailScreen(
             }
 
             // 3. Get episodes from old API - FIXED
-            resolvedAniwatchId?.let { slug ->
-                val episodesResponse = AniListRepository.getEpisodes(slug)
-                episodes = episodesResponse.episodes
-            }
-
+           resolvedAniwatchId?.let { slug ->
+    val episodesResponse = AniListRepository.getEpisodes(slug)
+    episodes = episodesResponse.episodes
+}
             inWatchlist = WatchlistManager.isInWatchlist(context, aniListId.toString())
         } catch (e: Exception) {
             e.printStackTrace()
