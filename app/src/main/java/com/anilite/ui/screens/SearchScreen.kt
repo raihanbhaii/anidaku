@@ -1,6 +1,7 @@
 package com.anilite.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -40,37 +41,88 @@ fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
 
+    // Function to perform search
+    suspend fun performSearch(query: String) {
+        if (query.isBlank()) return
+        
+        isLoading = true
+        try {
+            val result = AniListRepository.searchAnime(query)
+            searchResults = result.animes
+            isSearching = false
+        } catch (e: Exception) {
+            e.printStackTrace()
+            searchResults = emptyList()
+        } finally {
+            isLoading = false
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Search Bar
-        SearchBar(
-            query = searchQuery,
-            onQueryChange = { 
-                searchQuery = it
-                if (it.isNotEmpty()) {
-                    isSearching = true
-                    scope.launch {
-                        delay(500) // Debounce
-                        if (searchQuery == it) {
-                            performSearch(it)
-                        }
-                    }
-                } else {
-                    isSearching = false
-                    searchResults = emptyList()
-                }
-            },
-            onSearch = {
-                focusManager.clearFocus()
-                performSearch(searchQuery)
-            },
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
-        )
+                .padding(16.dp),
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 3.dp,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { 
+                    searchQuery = it
+                    if (it.isNotEmpty()) {
+                        isSearching = true
+                        scope.launch {
+                            delay(500) // Debounce
+                            if (searchQuery == it) {
+                                performSearch(it)
+                            }
+                        }
+                    } else {
+                        isSearching = false
+                        searchResults = emptyList()
+                    }
+                },
+                placeholder = {
+                    Text(
+                        text = "Search anime...",
+                        color = Color.Gray
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Purple40
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Purple40,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Purple40
+                ),
+                shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Search
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = { 
+                        focusManager.clearFocus()
+                        scope.launch { performSearch(searchQuery) }
+                    }
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
         // Content
         when {
@@ -87,11 +139,20 @@ fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Searching for \"$searchQuery\"...",
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = Purple40,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Searching for \"$searchQuery\"...",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
             searchResults.isNotEmpty() -> {
@@ -103,14 +164,44 @@ fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(searchResults, key = { it.id }) { anime ->
-                        SearchAnimeCard(
-                            anime = anime,
-                            onClick = { onAnimeClick(anime.id, null) }
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onAnimeClick(anime.id, null) }
+                        ) {
+                            AsyncImage(
+                                model = anime.coverImage,
+                                contentDescription = anime.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.DarkGray)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = anime.title,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                            if (anime.episodes != null) {
+                                Text(
+                                    text = "${anime.episodes} episodes",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
-            searchQuery.isNotEmpty() && !isSearching -> {
+            searchQuery.isNotEmpty() && !isSearching && searchResults.isEmpty() -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -152,106 +243,5 @@ fun SearchScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 3.dp,
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = {
-                Text(
-                    text = "Search anime...",
-                    color = Color.Gray
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = Purple40
-                )
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Purple40,
-                unfocusedBorderColor = Color.Transparent,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                cursorColor = Purple40
-            ),
-            shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search
-            ),
-            keyboardActions = KeyboardActions(
-                onSearch = { onSearch() }
-            ),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-fun SearchAnimeCard(anime: AniListAnime, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        AsyncImage(
-            model = anime.coverImage,
-            contentDescription = anime.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = anime.title,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        if (anime.episodes != null) {
-            Text(
-                text = "${anime.episodes} episodes",
-                color = Color.Gray,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-        }
-    }
-}
-
-private suspend fun performSearch(query: String) {
-    if (query.isBlank()) return
-    
-    try {
-        val result = AniListRepository.searchAnime(query)
-        // Update UI with results
-        // Note: This function is called from composable, so you need to use a state
-        // We'll handle this differently - see the SearchScreen composable above
-    } catch (e: Exception) {
-        e.printStackTrace()
     }
 }
