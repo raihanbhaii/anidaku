@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AnidakuApp(
-    onPlayEpisode: (String, String) -> Unit   // This expects (episodeId, fullTitle)
+    onPlayEpisode: (String, String) -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -104,25 +104,19 @@ fun AnidakuApp(
         ) {
             composable("home") {
                 HomeScreen(
-                    onAnimeClick = { animeId ->
-                        navController.navigate("detail/$animeId")
-                    }
+                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
                 )
             }
 
             composable("search") {
                 SearchScreen(
-                    onAnimeClick = { animeId ->
-                        navController.navigate("detail/$animeId")
-                    }
+                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
                 )
             }
 
             composable("watchlist") {
                 WatchlistScreen(
-                    onAnimeClick = { animeId ->
-                        navController.navigate("detail/$animeId")
-                    }
+                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
                 )
             }
 
@@ -140,8 +134,8 @@ fun AnidakuApp(
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
+                    // FIXED: Match the exact signature that AnimeDetailScreen expects
                     onPlayEpisode = { episodeId: String, episodeTitle: String, episodeNumber: Int ->
-                        // Properly combine title and episode number into one String
                         val fullTitle = "$episodeTitle - Episode $episodeNumber"
                         onPlayEpisode(episodeId, fullTitle)
                     }
