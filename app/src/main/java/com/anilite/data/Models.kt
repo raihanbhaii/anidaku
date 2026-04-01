@@ -13,7 +13,7 @@ data class EpisodeCount(
 // ── Home ──────────────────────────────────────────────────────────────────
 
 data class HomeResponse(
-    @SerializedName("spotlightAnimes") val spotlightAnimes: List<SpotlightAnime> = emptyList(), // ✅ fixed: was "spotLightAnimes"
+    @SerializedName("spotLightAnimes") val spotlightAnimes: List<SpotlightAnime> = emptyList(), // ✅ capital L — matches real API
     @SerializedName("trendingAnimes")     val trendingAnimes:     List<BasicAnime>     = emptyList(),
     @SerializedName("latestEpisodes")     val latestEpisodes:     List<AnimeItem>      = emptyList(),
     @SerializedName("top10Animes")        val top10Animes:        Top10Animes?         = null,
@@ -23,29 +23,27 @@ data class HomeResponse(
 )
 
 data class SpotlightAnime(
-    @SerializedName("id")           val id: String           = "",
-    @SerializedName("name")         val name: String         = "",
-    @SerializedName("rank")         val rank: Int?           = null,
-    @SerializedName("img")          val img: String          = "",
-    @SerializedName("episodes")     val episodes: EpisodeCount? = null,
-    @SerializedName("duration")     val duration: String     = "",
-    @SerializedName("quality")      val quality: String?     = null,
-    @SerializedName("category")     val category: String?    = null,
-    @SerializedName("releasedDay")  val releasedDay: String? = null,
-    @SerializedName("descriptions") val description: String? = null  // ✅ fixed: was "description"
+    @SerializedName("id")          val id: String          = "",
+    @SerializedName("name")        val name: String        = "",
+    @SerializedName("rank")        val rank: Int?          = null,
+    @SerializedName("img")         val img: String         = "",
+    @SerializedName("episodes")    val episodes: EpisodeCount? = null,
+    @SerializedName("duration")    val duration: String    = "",
+    @SerializedName("quality")     val quality: String?    = null,
+    @SerializedName("category")    val category: String?   = null,
+    @SerializedName("releasedDay") val releasedDay: String? = null,
+    @SerializedName("description") val description: String? = null // ✅ real API uses "description" (no 's')
 )
 
-// Generic anime card used in latest episodes, upcoming, recommended, etc.
 data class AnimeItem(
-    @SerializedName("id")       val id: String          = "",
-    @SerializedName("name")     val name: String        = "",
-    @SerializedName("img")      val img: String         = "",
+    @SerializedName("id")       val id: String             = "",
+    @SerializedName("name")     val name: String           = "",
+    @SerializedName("img")      val img: String            = "",
     @SerializedName("episodes") val episodes: EpisodeCount? = null,
-    @SerializedName("duration") val duration: String?   = null,
-    @SerializedName("rated")    val rated: Boolean      = false
+    @SerializedName("duration") val duration: String?      = null,
+    @SerializedName("rated")    val rated: Boolean         = false
 )
 
-// Minimal card (trending, featured sections)
 data class BasicAnime(
     @SerializedName("id")   val id: String   = "",
     @SerializedName("name") val name: String = "",
@@ -76,25 +74,25 @@ data class FeaturedAnimes(
 // ── Search / Category ─────────────────────────────────────────────────────
 
 data class SearchResponse(
-    @SerializedName("animes")            val animes:            List<AnimeItem>     = emptyList(),
-    @SerializedName("mostPopularAnimes") val mostPopularAnimes: List<RelatedAnime>  = emptyList(),
-    @SerializedName("top10Animes")       val top10Animes:       Top10Animes?        = null,
-    @SerializedName("category")          val category:          String              = "",
-    @SerializedName("genres")            val genres:            List<String>        = emptyList(),
-    @SerializedName("currentPage")       val currentPage:       Int                 = 1,
-    @SerializedName("hasNextPage")       val hasNextPage:       Boolean             = false,
-    @SerializedName("totalPages")        val totalPages:        Int                 = 1
+    @SerializedName("animes")            val animes:            List<AnimeItem>    = emptyList(),
+    @SerializedName("mostPopularAnimes") val mostPopularAnimes: List<RelatedAnime> = emptyList(),
+    @SerializedName("top10Animes")       val top10Animes:       Top10Animes?       = null,
+    @SerializedName("category")          val category:          String             = "",
+    @SerializedName("genres")            val genres:            List<String>       = emptyList(),
+    @SerializedName("currentPage")       val currentPage:       Int                = 1,
+    @SerializedName("hasNextPage")       val hasNextPage:       Boolean            = false,
+    @SerializedName("totalPages")        val totalPages:        Int                = 1
 )
 
 // ── Anime Detail ──────────────────────────────────────────────────────────
 
 data class AnimeDetailResponse(
-    @SerializedName("info")              val info:              AnimeInfo?          = null,
-    @SerializedName("moreInfo")          val moreInfo:          AnimeMoreInfo?      = null,
-    @SerializedName("seasons")           val seasons:           List<AnimeSeason>   = emptyList(),
-    @SerializedName("relatedAnimes")     val relatedAnimes:     List<RelatedAnime>  = emptyList(),
-    @SerializedName("recommendedAnimes") val recommendedAnimes: List<AnimeItem>     = emptyList(),
-    @SerializedName("mostPopularAnimes") val mostPopularAnimes: List<RelatedAnime>  = emptyList()
+    @SerializedName("info")              val info:              AnimeInfo?         = null,
+    @SerializedName("moreInfo")          val moreInfo:          AnimeMoreInfo?     = null,
+    @SerializedName("seasons")           val seasons:           List<AnimeSeason>  = emptyList(),
+    @SerializedName("relatedAnimes")     val relatedAnimes:     List<RelatedAnime> = emptyList(),
+    @SerializedName("recommendedAnimes") val recommendedAnimes: List<AnimeItem>    = emptyList(),
+    @SerializedName("mostPopularAnimes") val mostPopularAnimes: List<RelatedAnime> = emptyList()
 )
 
 data class AnimeInfo(
@@ -113,16 +111,16 @@ data class AnimeInfo(
 )
 
 data class AnimeMoreInfo(
-    @SerializedName("Japanese:")  val japanese:  String?       = null,
-    @SerializedName("Synonyms:")  val synonyms:  String?       = null,
-    @SerializedName("Aired:")     val aired:     String?       = null,
-    @SerializedName("Premiered:") val premiered: String?       = null,
-    @SerializedName("Duration:")  val duration:  String?       = null,
-    @SerializedName("Status:")    val status:    String?       = null,
-    @SerializedName("MAL Score:") val malScore:  String?       = null,
-    @SerializedName("Studios:")   val studios:   List<String>  = emptyList(), // ✅ fixed: was String?
-    @SerializedName("Genres")     val genres:    List<String>  = emptyList(),
-    @SerializedName("Producers")  val producers: List<String>  = emptyList()
+    @SerializedName("Japanese:")  val japanese:  String?      = null,
+    @SerializedName("Synonyms:")  val synonyms:  String?      = null,
+    @SerializedName("Aired:")     val aired:     String?      = null,
+    @SerializedName("Premiered:") val premiered: String?      = null,
+    @SerializedName("Duration:")  val duration:  String?      = null,
+    @SerializedName("Status:")    val status:    String?      = null,
+    @SerializedName("MAL Score:") val malScore:  String?      = null,
+    @SerializedName("Studios:")   val studios:   String?      = null, // ✅ real API returns a plain String e.g. "Toei Animation"
+    @SerializedName("Genres")     val genres:    List<String> = emptyList(),
+    @SerializedName("Producers")  val producers: List<String> = emptyList()
 )
 
 data class AnimeSeason(
@@ -158,10 +156,10 @@ data class Episode(
 // ── Servers ───────────────────────────────────────────────────────────────
 
 data class ServersResponse(
-    @SerializedName("episodeId") val episodeId: String  = "",
-    @SerializedName("episodeNo") val episodeNo: Int     = 0,
-    @SerializedName("sub")       val sub: List<Server>  = emptyList(),
-    @SerializedName("dub")       val dub: List<Server>  = emptyList()
+    @SerializedName("episodeId") val episodeId: String = "",
+    @SerializedName("episodeNo") val episodeNo: Int    = 0,
+    @SerializedName("sub")       val sub: List<Server> = emptyList(),
+    @SerializedName("dub")       val dub: List<Server> = emptyList()
 )
 
 data class Server(
