@@ -1,7 +1,7 @@
 package com.anilite
 
-import android.view.ViewGroup
 import android.os.Bundle
+import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,11 +30,11 @@ import com.anilite.ui.theme.Purple40
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val playerUrl = intent.getStringExtra("playerUrl") ?: ""
-        val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
+        val episodeTitle = intent.getStringExtra("episodeTitle") ?: "Unknown Episode"
         val episodeNumber = intent.getIntExtra("episodeNumber", 1)
 
         setContent {
@@ -57,14 +57,13 @@ fun PlayerScreen(
     episodeNumber: Int,
     onBack: () -> Unit
 ) {
-    var category by remember { mutableStateOf("sub") }   // sub or dub
+    var category by remember { mutableStateOf("sub") }
     var showControls by remember { mutableStateOf(true) }
     var currentUrl by remember { mutableStateOf(playerUrl) }
 
-    // Rebuild URL when category changes
-    LaunchedEffect(category) {
+    // Update URL when user switches between Sub / Dub
+    LaunchedEffect(category, playerUrl) {
         if (playerUrl.contains("/s-2/")) {
-            // Replace sub/dub at the end
             currentUrl = playerUrl.substringBeforeLast("/") + "/$category"
         }
     }
@@ -75,7 +74,7 @@ fun PlayerScreen(
             .background(Color.Black)
             .clickable { showControls = !showControls }
     ) {
-        // MegaPlay Embed using WebView
+        // MegaPlay WebView Player
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -86,11 +85,9 @@ fun PlayerScreen(
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36"
                     }
-
                     webViewClient = WebViewClient()
                     loadUrl(currentUrl)
 
-                    // Make it fullscreen
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -103,7 +100,7 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top Controls (visible when showControls = true)
+        // Overlay Controls
         if (showControls) {
             Box(
                 modifier = Modifier
@@ -162,7 +159,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // Bottom hint
+                // Bottom Hint
                 Text(
                     text = "Tap screen to show/hide controls",
                     color = Color.White.copy(alpha = 0.6f),
