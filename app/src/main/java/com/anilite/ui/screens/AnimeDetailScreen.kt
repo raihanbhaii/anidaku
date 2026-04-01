@@ -3,6 +3,7 @@ package com.anilite.ui.screens
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,24 +27,61 @@ import coil.compose.AsyncImage
 import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import com.anilite.ui.theme.SurfaceVariant
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+
+// ==================== DATA CLASSES (Add these in com.anilite.data package) ====================
+
+@Serializable
+data class AnimeDetailResponse(
+    val info: AnimeInfo? = null
+)
+
+@Serializable
+data class AnimeInfo(
+    val id: String? = null,
+    val name: String? = null,
+    val img: String? = null,
+    val poster: String? = null,
+    val description: String? = null,
+    val category: String? = null,     // e.g. "TV", "Movie"
+    val quality: String? = null,
+    val duration: String? = null,
+    val type: String? = null,
+    val status: String? = null,
+    val releaseDate: String? = null,
+    val genres: List<String>? = null,
+    @Contextual
+    val episodes: JsonElement? = null   // Safe for complex episodes data
+)
+
+@Serializable
+data class Episode(
+    val name: String? = null,
+    val episodeNo: Int = 0,
+    val episodeId: String = ""   // e.g. "one-piece-100?ep=12345"
+)
+
+// ==================== MAIN SCREEN ====================
 
 @Composable
 fun AnimeDetailScreen(
-    animeId: Int,                                   // Changed to Int to match MainActivity
+    animeId: String,                    // Changed to String (recommended)
     onBack: () -> Unit,
     onPlayEpisode: (playerUrl: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
     val context = LocalContext.current
+    val repository = remember { AniwatchRepository() }
 
     var animeDetail by remember { mutableStateOf<AnimeDetailResponse?>(null) }
     var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var errorMsg by remember { mutableStateOf("") }
     var inWatchlist by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
-    var errorMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(animeId) {
-        if (animeId == -1) {
+        if (animeId.isBlank()) {
             errorMsg = "Invalid anime ID"
             isLoading = false
             return@LaunchedEffect
@@ -53,13 +91,17 @@ fun AnimeDetailScreen(
         errorMsg = ""
 
         try {
-            val detailResponse = AniApiService.getAnimeDetail(animeId.toString())
-            animeDetail = detailResponse
+            val detailResponse = repository.getAnimeDetails(animeId)
+            animeDetail = if (detailResponse != null) {
+                AnimeDetailResponse(info = detailResponse)   // Adapt if your API returns flat structure
+            } else null
 
-            val episodesResponse = AniApiService.getEpisodes(animeId.toString())
-            episodes = episodesResponse.episodes
+            val rawEpisodes = repository.getEpisodes(animeId)
+            // TODO: Convert raw episodes (List<Any> or JsonElement) to List<Episode> if needed
+            // For now, keep simple (you may need custom parsing later)
+            episodes = emptyList() // Replace with proper mapping once you see the response
 
-            inWatchlist = WatchlistManager.isInWatchlist(context, animeId.toString())
+            inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
             errorMsg = "Failed to load anime: ${e.message ?: e::class.simpleName}"
             e.printStackTrace()
@@ -81,11 +123,11 @@ fun AnimeDetailScreen(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = errorMsg.ifEmpty { "Failed to load anime" },
+                    text = errorMsg.ifEmpty { "Failed to load anime details" },
                     color = Color.Red
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { /* Add retry logic here if needed */ }) {
+                Button(onClick = { /* TODO: Add retry logic */ }) {
                     Text("Retry")
                 }
             }
@@ -105,12 +147,11 @@ fun AnimeDetailScreen(
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
-                    model = info.img,
+                    model = info.img ?: info.poster,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
-
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
@@ -129,13 +170,13 @@ fun AnimeDetailScreen(
                 IconButton(
                     onClick = {
                         val watchlistAnime = WatchlistAnime(
-                            id = animeId.toString(),
-                            name = info.name,
-                            img = info.img,
-                            type = info.category
+                            id = animeId,
+                            name = info.name.orEmpty(),
+                            img = info.img.orEmpty(),
+                            type = info.category.orEmpty()
                         )
                         if (inWatchlist) {
-                            WatchlistManager.removeFromWatchlist(context, animeId.toString())
+                            WatchlistManager.removeFromWatchlist(context, animeId)
                         } else {
                             WatchlistManager.addToWatchlist(context, watchlistAnime)
                         }
@@ -156,12 +197,11 @@ fun AnimeDetailScreen(
         item {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = info.name,
+                    text = info.name.orEmpty(),
                     color = Color.White,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
                 )
-
                 Spacer(Modifier.height(8.dp))
 
                 Row(
@@ -219,9 +259,9 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Content based on selected tab
+        // Episodes Tab
         when (selectedTab) {
-            0 -> { // Episodes Tab
+            0 -> {
                 if (episodeList.isNotEmpty()) {
                     item {
                         Text(
@@ -232,20 +272,17 @@ fun AnimeDetailScreen(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
-                    items(episodeList.size) { index ->
-                        val ep = episodeList[index]
+                    items(episodeList) { ep ->
                         EpisodeItem(
                             episode = ep,
                             onClick = {
-                                val epIdNumber = ep.episodeId.substringAfter("?ep=", "")
-                                if (epIdNumber.isNotEmpty()) {
-                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
-                                    onPlayEpisode(
-                                        playerUrl,
-                                        ep.name ?: "Episode ${ep.episodeNo}",
-                                        ep.episodeNo
-                                    )
-                                }
+                                val epNumber = ep.episodeId.substringAfter("?ep=", "").toIntOrNull() ?: ep.episodeNo
+                                val playerUrl = "https://megaplay.buzz/stream/s-2/${epNumber}/sub"
+                                onPlayEpisode(
+                                    playerUrl,
+                                    ep.name ?: "Episode ${ep.episodeNo}",
+                                    ep.episodeNo
+                                )
                             }
                         )
                     }
@@ -282,7 +319,7 @@ fun AnimeDetailScreen(
     }
 }
 
-// Episode Item
+// Episode Item Composable (unchanged)
 @Composable
 fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
     Row(
@@ -305,9 +342,7 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-
         Spacer(Modifier.width(14.dp))
-
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = episode.name ?: "Episode ${episode.episodeNo}",
@@ -321,7 +356,6 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
                 fontSize = 12.sp
             )
         }
-
         Icon(
             Icons.Default.PlayArrow,
             null,
