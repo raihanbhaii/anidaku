@@ -30,7 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
+fun HomeScreen(onAnimeClick: (aniListId: Int) -> Unit) {
     var trending by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var airing by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var popular by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
@@ -86,25 +86,25 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
         if (trending.isNotEmpty()) {
             SpotlightCarousel(
                 animes = trending.take(10),
-                onAnimeClick = { onAnimeClick(it.id, null) }
+                onAnimeClick = { onAnimeClick(it.id) }
             )
             Spacer(Modifier.height(16.dp))
         }
 
         if (trending.isNotEmpty()) {
-            AniListAnimeRow(title = "Trending", animes = trending, onAnimeClick = { onAnimeClick(it.id, null) })
+            AniListAnimeRow(title = "Trending", animes = trending, onAnimeClick = { onAnimeClick(it.id) })
         }
         
         if (airing.isNotEmpty()) {
-            AniListAnimeRow(title = "Currently Airing", animes = airing, onAnimeClick = { onAnimeClick(it.id, null) })
+            AniListAnimeRow(title = "Currently Airing", animes = airing, onAnimeClick = { onAnimeClick(it.id) })
         }
         
         if (popular.isNotEmpty()) {
-            AniListAnimeRow(title = "Most Popular", animes = popular, onAnimeClick = { onAnimeClick(it.id, null) })
+            AniListAnimeRow(title = "Most Popular", animes = popular, onAnimeClick = { onAnimeClick(it.id) })
         }
         
         if (upcoming.isNotEmpty()) {
-            AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id, null) })
+            AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id) })
         }
 
         if (trending.isEmpty() && airing.isEmpty() && popular.isEmpty() && upcoming.isEmpty()) {
@@ -112,12 +112,32 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "No anime available\nCheck your internet connection",
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "No anime available",
+                        color = Color.Gray,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Check your internet connection",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                    Button(
+                        onClick = {
+                            isLoading = true
+                            // Reload data
+                            // You'll need to create a refresh function
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Purple40)
+                    ) {
+                        Text("Retry")
+                    }
+                }
             }
         }
 
@@ -190,6 +210,7 @@ fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -
                         )
                     }
                 }
+                // aired episodes badge
                 val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
                 aired?.let {
                     if (it > 0) {
@@ -279,6 +300,7 @@ fun AniListAnimeCard(anime: AniListAnime, onClick: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+        // Show aired episodes count
         val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
         aired?.let {
             if (it > 0) {
