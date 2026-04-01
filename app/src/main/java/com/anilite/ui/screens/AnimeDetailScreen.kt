@@ -35,7 +35,7 @@ import com.anilite.ui.theme.SurfaceVariant
 fun AnimeDetailScreen(
     animeId: String,
     onBack: () -> Unit,
-    onPlayEpisode: (animeId: String, episodeId: String) -> Unit
+    onPlayEpisode: (animeId: String, episodeId: String, title: String) -> Unit
 ) {
     val context = LocalContext.current
     var detail by remember { mutableStateOf<com.anilite.data.AnimeDetail?>(null) }
