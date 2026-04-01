@@ -1,7 +1,6 @@
 package com.anilite
 
 import android.annotation.SuppressLint
-import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import android.webkit.*
@@ -46,7 +45,6 @@ class PlayerActivity : ComponentActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Modern immersive mode (replaces deprecated systemUiVisibility)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -281,7 +279,8 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = onBack) {
-                                Icon(ArrowBack, contentDescription = null, tint = Color.White)
+                                // FIX: use full qualifier instead of bare ArrowBack
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
