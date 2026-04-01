@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,7 +32,7 @@ fun AnimeCard(
     ) {
         Box {
             AsyncImage(
-                model = anime.poster,
+                model = anime.img,                    // ← was anime.poster
                 contentDescription = anime.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -42,9 +41,10 @@ fun AnimeCard(
                     .clip(RoundedCornerShape(8.dp))
                     .background(CardBg)
             )
-            anime.type?.let {
+            // Show SUB episode count badge (replaces the removed .type field)
+            anime.episodes?.sub?.let { subCount ->
                 Text(
-                    text = it,
+                    text = "SUB $subCount",
                     color = Color.White,
                     fontSize = 9.sp,
                     modifier = Modifier
@@ -57,7 +57,7 @@ fun AnimeCard(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = anime.name ?: "",
+            text = anime.name,
             color = Color.White,
             fontSize = 11.sp,
             maxLines = 2,
