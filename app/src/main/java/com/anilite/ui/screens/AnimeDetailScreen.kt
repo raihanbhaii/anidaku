@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.anilite.data.AnimeInfo
 import com.anilite.data.Episode
 import com.anilite.data.RetrofitClient
 import com.anilite.data.WatchlistAnime
@@ -38,17 +39,19 @@ fun AnimeDetailScreen(
     onPlayEpisode: (animeId: String, episodeId: String, title: String) -> Unit
 ) {
     val context = LocalContext.current
-    var detail by remember { mutableStateOf<com.anilite.data.AnimeDetail?>(null) }
+    var info by remember { mutableStateOf<AnimeInfo?>(null) }
+    var moreInfo by remember { mutableStateOf<com.anilite.data.AnimeMoreInfo?>(null) }
     var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var inWatchlist by remember { mutableStateOf(WatchlistManager.isInWatchlist(context, animeId)) }
 
     LaunchedEffect(animeId) {
         try {
-            val detailResp = RetrofitClient.api.getAnimeDetail(animeId)
-            detail = detailResp.data?.anime
-            val epResp = RetrofitClient.api.getEpisodes(animeId)
-            episodes = epResp.data?.episodes ?: emptyList()
+            val detailResp = RetrofitClient.api.getAnimeDetail(animeId) // ← no .data wrapper
+            info = detailResp.info
+            moreInfo = detailResp.moreInfo
+            val epResp = RetrofitClient.api.getEpisodes(animeId)        // ← no .data wrapper
+            episodes = epResp.episodes
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
@@ -71,7 +74,7 @@ fun AnimeDetailScreen(
         item {
             Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
                 AsyncImage(
-                    model = detail?.info?.poster,
+                    model = info?.img,              // ← was info?.poster
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -89,7 +92,6 @@ fun AnimeDetailScreen(
                 }
                 IconButton(
                     onClick = {
-                        val info = detail?.info
                         if (inWatchlist) {
                             WatchlistManager.removeFromWatchlist(context, animeId)
                         } else {
@@ -98,8 +100,8 @@ fun AnimeDetailScreen(
                                 WatchlistAnime(
                                     id = animeId,
                                     name = info?.name ?: "",
-                                    poster = info?.poster ?: "",
-                                    type = info?.stats?.type
+                                    img = info?.img ?: "",       // ← was poster
+                                    type = info?.category        // ← was stats?.type
                                 )
                             )
                         }
@@ -119,20 +121,19 @@ fun AnimeDetailScreen(
         item {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = detail?.info?.name ?: "",
+                    text = info?.name ?: "",
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(4.dp))
-                val stats = detail?.info?.stats
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    stats?.rating?.let { StatChip(it) }
-                    stats?.type?.let { StatChip(it) }
-                    stats?.duration?.let { StatChip(it) }
+                    info?.rating?.takeIf { it.isNotEmpty() }?.let { StatChip(it) }
+                    info?.category?.takeIf { it.isNotEmpty() }?.let { StatChip(it) }   // ← was stats?.type
+                    info?.duration?.takeIf { it.isNotEmpty() }?.let { StatChip(it) }   // ← was stats?.duration
                 }
                 Spacer(Modifier.height(8.dp))
-                detail?.moreInfo?.genres?.let { genres ->
+                moreInfo?.genres?.takeIf { it.isNotEmpty() }?.let { genres ->
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -150,7 +151,7 @@ fun AnimeDetailScreen(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                detail?.info?.description?.let { desc ->
+                info?.description?.takeIf { it.isNotEmpty() }?.let { desc ->
                     var expanded by remember { mutableStateOf(false) }
                     Text(
                         text = desc,
@@ -177,13 +178,12 @@ fun AnimeDetailScreen(
             }
         }
 
-        items(episodes, key = { it.episodeId ?: it.number ?: 0 }) { ep ->
+        items(episodes, key = { it.episodeId.ifEmpty { it.episodeNo.toString() } }) { ep ->
             EpisodeRow(
                 episode = ep,
                 onClick = {
-                    ep.epNumericId?.let { numId ->
-                        onPlayEpisode(animeId, numId, "Episode ${ep.number}")
-                    }
+                    // episodeId is already the full id like "anime-id?ep=12345"
+                    onPlayEpisode(animeId, ep.episodeId, "Episode ${ep.episodeNo}")
                 }
             )
         }
@@ -220,7 +220,7 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "${episode.number}",
+                text = "${episode.episodeNo}",      // ← was episode.number
                 color = Purple40,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -229,13 +229,13 @@ fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.title ?: "Episode ${episode.number}",
+                text = episode.name ?: "Episode ${episode.episodeNo}",  // ← was episode.title
                 color = Color.White,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (episode.isFiller == true) {
+            if (episode.filler) {                   // ← was episode.isFiller == true
                 Text("Filler", color = Color(0xFFFF6B6B), fontSize = 10.sp)
             }
         }
