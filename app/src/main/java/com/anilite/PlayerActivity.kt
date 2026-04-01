@@ -1,6 +1,7 @@
 package com.anilite
 
 import android.annotation.SuppressLint
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import android.webkit.*
@@ -11,7 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.AutoMirrored.Filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -26,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -41,15 +45,16 @@ class PlayerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility = (
-            android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
-            android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        )
+
+        // Modern immersive mode (replaces deprecated systemUiVisibility)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
 
         val episodeId = intent.getStringExtra("episodeId") ?: ""
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
-        val animeId = intent.getIntExtra("animeId", 0)
         val episodeNumber = intent.getIntExtra("episodeNumber", 1)
 
         setContent {
@@ -57,7 +62,6 @@ class PlayerActivity : ComponentActivity() {
                 PlayerScreen(
                     episodeId = episodeId,
                     episodeTitle = episodeTitle,
-                    animeId = animeId,
                     episodeNumber = episodeNumber,
                     onBack = { finish() }
                 )
@@ -72,7 +76,6 @@ class PlayerActivity : ComponentActivity() {
 fun PlayerScreen(
     episodeId: String,
     episodeTitle: String,
-    animeId: Int,
     episodeNumber: Int,
     onBack: () -> Unit
 ) {
@@ -86,24 +89,10 @@ fun PlayerScreen(
     var showControls by remember { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Use different streaming sources based on what's available
-    // Option 1: Gogoanime (common source)
-    // Option 2: Consumet API
-    // Option 3: Your custom source
-    
-    // For now, using a placeholder - you'll need to implement actual streaming
     val embedUrl = remember(episodeId, category) {
-        // Option A: Use Gogoanime if you have the episode ID
-        // "https://gogoanime.gg/" + episodeId
-        
-        // Option B: Use consumet API
-        // "https://api.consumet.org/anime/gogoanime/watch/$episodeId?server=vidstreaming"
-        
-        // Option C: Use your existing megaplay source
         "https://megaplay.buzz/stream/s-2/$episodeId/$category"
     }
 
-    // Timeout: Show error if no m3u8 found in 15 seconds
     LaunchedEffect(episodeId, category) {
         streamUrl = null
         isExtracting = true
@@ -117,7 +106,6 @@ fun PlayerScreen(
         }
     }
 
-    // Hidden WebView to intercept .m3u8 stream
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
@@ -157,7 +145,6 @@ fun PlayerScreen(
         modifier = Modifier.size(1.dp)
     )
 
-    // Cleanup WebView when leaving the screen
     DisposableEffect(Unit) {
         onDispose {
             webViewRef?.stopLoading()
@@ -166,7 +153,6 @@ fun PlayerScreen(
         }
     }
 
-    // Auto hide controls after 4 seconds
     LaunchedEffect(showControls) {
         if (showControls) {
             delay(4000)
@@ -195,16 +181,22 @@ fun PlayerScreen(
 
             error != null -> {
                 Column(
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text("⚠️", fontSize = 40.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = Color.White, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(
+                        error!!,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
 
                     Spacer(Modifier.height(24.dp))
 
-                    // SUB / DUB buttons
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("sub", "dub").forEach { cat ->
                             Button(
@@ -265,7 +257,6 @@ fun PlayerScreen(
                     onDispose { player.release() }
                 }
 
-                // ExoPlayer View
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
@@ -276,14 +267,12 @@ fun PlayerScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Custom Controls Overlay
                 if (showControls) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color(0x88000000))
                     ) {
-                        // Top Bar
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -292,7 +281,7 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = onBack) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
+                                Icon(ArrowBack, contentDescription = null, tint = Color.White)
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
@@ -310,7 +299,6 @@ fun PlayerScreen(
                                 )
                             }
 
-                            // Sub/Dub Toggle
                             Row(
                                 modifier = Modifier
                                     .background(Color(0xFF1C1C28), RoundedCornerShape(20.dp))
@@ -337,7 +325,6 @@ fun PlayerScreen(
                             Spacer(Modifier.width(8.dp))
                         }
 
-                        // Center Playback Controls
                         Row(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -374,7 +361,6 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Bottom Progress Bar
                         var progress by remember { mutableStateOf(0f) }
                         var duration by remember { mutableStateOf(0L) }
 
@@ -411,16 +397,8 @@ fun PlayerScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    formatTime((progress * duration).toLong()),
-                                    color = Color.White,
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    formatTime(duration),
-                                    color = Color.White,
-                                    fontSize = 11.sp
-                                )
+                                Text(formatTime((progress * duration).toLong()), color = Color.White, fontSize = 11.sp)
+                                Text(formatTime(duration), color = Color.White, fontSize = 11.sp)
                             }
                         }
                     }
