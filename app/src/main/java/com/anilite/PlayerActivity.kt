@@ -49,12 +49,16 @@ class PlayerActivity : ComponentActivity() {
 
         val episodeId = intent.getStringExtra("episodeId") ?: ""
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
+        val animeId = intent.getIntExtra("animeId", 0)
+        val episodeNumber = intent.getIntExtra("episodeNumber", 1)
 
         setContent {
             AnidakuTheme {
                 PlayerScreen(
                     episodeId = episodeId,
                     episodeTitle = episodeTitle,
+                    animeId = animeId,
+                    episodeNumber = episodeNumber,
                     onBack = { finish() }
                 )
             }
@@ -68,6 +72,8 @@ class PlayerActivity : ComponentActivity() {
 fun PlayerScreen(
     episodeId: String,
     episodeTitle: String,
+    animeId: Int,
+    episodeNumber: Int,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -80,7 +86,20 @@ fun PlayerScreen(
     var showControls by remember { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
+    // Use different streaming sources based on what's available
+    // Option 1: Gogoanime (common source)
+    // Option 2: Consumet API
+    // Option 3: Your custom source
+    
+    // For now, using a placeholder - you'll need to implement actual streaming
     val embedUrl = remember(episodeId, category) {
+        // Option A: Use Gogoanime if you have the episode ID
+        // "https://gogoanime.gg/" + episodeId
+        
+        // Option B: Use consumet API
+        // "https://api.consumet.org/anime/gogoanime/watch/$episodeId?server=vidstreaming"
+        
+        // Option C: Use your existing megaplay source
         "https://megaplay.buzz/stream/s-2/$episodeId/$category"
     }
 
@@ -170,7 +189,7 @@ fun PlayerScreen(
                     CircularProgressIndicator(color = Purple40, strokeWidth = 3.dp)
                     Spacer(Modifier.height(12.dp))
                     Text("Loading stream...", color = Color.White, fontSize = 13.sp)
-                    Text("Fetching from megaplay.buzz", color = Color.Gray, fontSize = 11.sp)
+                    Text("Episode $episodeNumber", color = Color.Gray, fontSize = 11.sp)
                 }
             }
 
@@ -276,14 +295,20 @@ fun PlayerScreen(
                                 Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
                             }
 
-                            Text(
-                                text = episodeTitle,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = episodeTitle,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "Episode $episodeNumber",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp
+                                )
+                            }
 
                             // Sub/Dub Toggle
                             Row(
