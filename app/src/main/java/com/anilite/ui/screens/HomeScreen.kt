@@ -23,23 +23,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.anilite.data.AnimeItem
-import com.anilite.data.BasicAnime
-import com.anilite.data.RetrofitClient
-import com.anilite.data.SpotlightAnime
-import com.anilite.ui.components.AnimeCard
+import com.anilite.data.AniListAnime
+import com.anilite.data.AniListRepository
 import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(onAnimeClick: (String) -> Unit) {
-    var homeData by remember { mutableStateOf<com.anilite.data.HomeResponse?>(null) }
+fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
+    var trending by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
+    var airing by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
+    var popular by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
+    var upcoming by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         try {
-            homeData = RetrofitClient.api.getHome() // ← no .data wrapper
+            trending = AniListRepository.getTrending().animes
+            airing   = AniListRepository.getAiring().animes
+            popular  = AniListRepository.getPopular().animes
+            upcoming = AniListRepository.getUpcoming().animes
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
@@ -68,77 +71,48 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             modifier = Modifier.padding(16.dp)
         )
 
-        homeData?.spotlightAnimes?.takeIf { it.isNotEmpty() }?.let {
-            SpotlightCarousel(spotlights = it, onAnimeClick = onAnimeClick)
+        if (trending.isNotEmpty()) {
+            SpotlightCarousel(
+                animes = trending.take(10),
+                onAnimeClick = { onAnimeClick(it.id, null) }
+            )
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // trendingAnimes → BasicAnime, convert to AnimeItem for AnimeRow
-        homeData?.trendingAnimes?.takeIf { it.isNotEmpty() }?.let { list ->
-            AnimeRow(
-                title = "Trending",
-                animes = list.map { AnimeItem(id = it.id, name = it.name, img = it.img) },
-                onAnimeClick = onAnimeClick
-            )
-        }
-
-        // latestEpisodes → AnimeItem directly
-        homeData?.latestEpisodes?.takeIf { it.isNotEmpty() }?.let {
-            AnimeRow(title = "Latest Episodes", animes = it, onAnimeClick = onAnimeClick)
-        }
-
-        // featuredAnimes.topAiringAnimes → BasicAnime → convert
-        homeData?.featuredAnimes?.topAiringAnimes?.takeIf { it.isNotEmpty() }?.let { list ->
-            AnimeRow(
-                title = "Top Airing",
-                animes = list.map { AnimeItem(id = it.id, name = it.name, img = it.img) },
-                onAnimeClick = onAnimeClick
-            )
-        }
-
-        // featuredAnimes.mostPopularAnimes → BasicAnime → convert
-        homeData?.featuredAnimes?.mostPopularAnimes?.takeIf { it.isNotEmpty() }?.let { list ->
-            AnimeRow(
-                title = "Most Popular",
-                animes = list.map { AnimeItem(id = it.id, name = it.name, img = it.img) },
-                onAnimeClick = onAnimeClick
-            )
-        }
-
-        // topUpcomingAnimes → AnimeItem directly
-        homeData?.topUpcomingAnimes?.takeIf { it.isNotEmpty() }?.let {
-            AnimeRow(title = "Top Upcoming", animes = it, onAnimeClick = onAnimeClick)
-        }
+        AniListAnimeRow(title = "Trending", animes = trending, onAnimeClick = { onAnimeClick(it.id, null) })
+        AniListAnimeRow(title = "Currently Airing", animes = airing, onAnimeClick = { onAnimeClick(it.id, null) })
+        AniListAnimeRow(title = "Most Popular", animes = popular, onAnimeClick = { onAnimeClick(it.id, null) })
+        AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id, null) })
 
         Spacer(Modifier.height(80.dp))
     }
 }
 
 @Composable
-fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -> Unit) {
-    val pagerState = rememberPagerState { spotlights.size }
+fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -> Unit) {
+    val pagerState = rememberPagerState { animes.size }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(4000)
-            val next = (pagerState.currentPage + 1) % spotlights.size
+            val next = (pagerState.currentPage + 1) % animes.size
             scope.launch { pagerState.animateScrollToPage(next) }
         }
     }
 
     Box(modifier = Modifier.fillMaxWidth().height(220.dp)) {
         HorizontalPager(state = pagerState) { page ->
-            val anime = spotlights[page]
+            val anime = animes[page]
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { if (anime.id.isNotEmpty()) onAnimeClick(anime.id) }
+                    .clickable { onAnimeClick(anime) }
             ) {
                 AsyncImage(
-                    model = anime.img,           // ← was anime.poster
-                    contentDescription = anime.name,
+                    model = anime.bannerImage ?: anime.coverImage,
+                    contentDescription = anime.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -158,18 +132,17 @@ fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = anime.name,
+                        text = anime.title,
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // Build info row from available fields
                     val info = listOfNotNull(
-                        anime.quality,
-                        anime.category,
-                        anime.duration.takeIf { it.isNotEmpty() }
+                        anime.format,
+                        anime.status?.replace("_", " "),
+                        anime.duration?.let { "${it}m" }
                     ).take(3)
                     if (info.isNotEmpty()) {
                         Text(
@@ -179,9 +152,11 @@ fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -
                         )
                     }
                 }
-                anime.rank?.let {
+                // aired episodes badge
+                val aired = anime.nextAiringEpisode?.episode?.minus(1) ?: anime.episodes
+                aired?.let {
                     Text(
-                        text = "#$it",
+                        text = "Ep $it",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
@@ -201,7 +176,7 @@ fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -
                 .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            spotlights.indices.forEach { i ->
+            animes.indices.forEach { i ->
                 Box(
                     modifier = Modifier
                         .size(if (i == pagerState.currentPage) 8.dp else 5.dp)
@@ -214,7 +189,12 @@ fun SpotlightCarousel(spotlights: List<SpotlightAnime>, onAnimeClick: (String) -
 }
 
 @Composable
-fun AnimeRow(title: String, animes: List<AnimeItem>, onAnimeClick: (String) -> Unit) {
+fun AniListAnimeRow(
+    title: String,
+    animes: List<AniListAnime>,
+    onAnimeClick: (AniListAnime) -> Unit
+) {
+    if (animes.isEmpty()) return
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
             text = title,
@@ -227,9 +207,45 @@ fun AnimeRow(title: String, animes: List<AnimeItem>, onAnimeClick: (String) -> U
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(animes, key = { it.id.ifEmpty { it.name } }) { anime ->
-                AnimeCard(anime = anime, onClick = { if (anime.id.isNotEmpty()) onAnimeClick(anime.id) })
+            items(animes, key = { it.id }) { anime ->
+                AniListAnimeCard(anime = anime, onClick = { onAnimeClick(anime) })
             }
+        }
+    }
+}
+
+@Composable
+fun AniListAnimeCard(anime: AniListAnime, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(110.dp)
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = anime.coverImage,
+            contentDescription = anime.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(155.dp)
+                .clip(RoundedCornerShape(8.dp))
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = anime.title,
+            color = Color.White,
+            fontSize = 11.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        // Show aired episodes count
+        val aired = anime.nextAiringEpisode?.episode?.minus(1) ?: anime.episodes
+        aired?.let {
+            Text(
+                text = "Ep $it aired",
+                color = Purple40,
+                fontSize = 10.sp
+            )
         }
     }
 }
