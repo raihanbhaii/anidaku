@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 interface ApiService {
 
-    @GET("aniwatch/home")
+    @GET("aniwatch/")
     suspend fun getHome(): HomeResponse
 
     @GET("aniwatch/search")
@@ -28,10 +28,12 @@ interface ApiService {
     @GET("aniwatch/servers")
     suspend fun getServers(@Query("id") episodeId: String): ServersResponse
 
+    // ← note: endpoint is "aniwatch/episode-srcs" not "aniwatch/..."
+    // ← server id param uses "?ep=" combined in episodeId, category defaults to "sub"
     @GET("aniwatch/episode-srcs")
     suspend fun getSources(
         @Query("id") episodeId: String,
-        @Query("server") server: String = "hd-1",
+        @Query("server") server: String = "vidstreaming",
         @Query("category") category: String = "sub"
     ): SourcesResponse
 
@@ -40,9 +42,15 @@ interface ApiService {
         @Path("category") category: String,
         @Query("page") page: Int = 1
     ): SearchResponse
+
+    @GET("aniwatch/az-list")
+    suspend fun getAzList(
+        @Query("page") page: Int = 1
+    ): List<RelatedAnime>
 }
 
 object RetrofitClient {
+    // ← your own hosted URL, not the docs URL
     private const val BASE_URL = "https://anidexz-api.vercel.app/"
 
     private val client = OkHttpClient.Builder()
