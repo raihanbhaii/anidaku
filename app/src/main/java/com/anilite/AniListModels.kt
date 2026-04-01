@@ -10,14 +10,14 @@ data class AniListAnime(
     val description: String? = null,
     val genres: List<String> = emptyList(),
     val averageScore: Int? = null,
-    val status: String? = null,       // FINISHED, RELEASING, NOT_YET_RELEASED
-    val format: String? = null,       // TV, MOVIE, OVA, etc.
-    val episodes: Int? = null,        // total planned episodes
+    val status: String? = null,
+    val format: String? = null,
+    val episodes: Int? = null,
     val duration: Int? = null,
     val season: String? = null,
     val seasonYear: Int? = null,
     val studios: List<String> = emptyList(),
-    val nextAiringEpisode: NextAiring? = null,  // null if not airing
+    val nextAiringEpisode: NextAiring? = null,
     val startDate: FuzzyDate? = null,
     val endDate: FuzzyDate? = null,
     val popularity: Int? = null,
@@ -26,8 +26,8 @@ data class AniListAnime(
 )
 
 data class NextAiring(
-    val episode: Int,           // next episode number
-    val airingAt: Long          // unix timestamp
+    val episode: Int,
+    val airingAt: Long
 )
 
 data class FuzzyDate(
@@ -52,10 +52,4 @@ data class AniListSearchResult(
     val totalPages: Int
 )
 
-data class Episode(
-    val id: Int,
-    val number: Int,
-    val title: String? = null,
-    val thumbnail: String? = null,
-    val url: String? = null
-)
+// Episode class is NOT here anymore - it's now only in Models.kt
