@@ -63,7 +63,7 @@ fun AnimeDetailScreen(
                 } catch (_: Exception) {}
             }
 
-            // 3. Get episodes from old API - FIXED: removed .episodes
+            // 3. Get episodes from old API - FIXED
             resolvedAniwatchId?.let { slug ->
                 val episodesResponse = AniListRepository.getEpisodes(slug)
                 episodes = episodesResponse.episodes
