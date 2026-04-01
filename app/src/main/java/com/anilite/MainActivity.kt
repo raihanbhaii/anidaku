@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
     val navController = rememberNavController()
+
     val bottomItems = listOf(
         Triple("home", "Home", Icons.Default.Home),
         Triple("search", "Search", Icons.Default.Search),
@@ -99,38 +100,41 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
         ) {
             composable("home") {
                 HomeScreen(
-                    onAnimeClick = { aniListId ->
-                        navController.navigate("detail/$aniListId")
+                    onAnimeClick = { animeId ->
+                        navController.navigate("detail/$animeId")
                     }
                 )
             }
+
             composable("search") {
                 SearchScreen(
-                    onAnimeClick = { aniListId ->
-                        navController.navigate("detail/$aniListId")
+                    onAnimeClick = { animeId ->
+                        navController.navigate("detail/$animeId")
                     }
                 )
             }
+
             composable("watchlist") {
                 WatchlistScreen(
-                    onAnimeClick = { aniListId ->
-                        navController.navigate("detail/$aniListId")
+                    onAnimeClick = { animeId ->
+                        navController.navigate("detail/$animeId")
                     }
                 )
             }
+
             composable(
-                route = "detail/{aniListId}",
+                route = "detail/{animeId}",
                 arguments = listOf(
-                    navArgument("aniListId") {
+                    navArgument("animeId") {
                         type = NavType.IntType
-                        defaultValue = 0
+                        defaultValue = -1
                     }
                 )
-            ) { backStack ->
-                val aniListId = backStack.arguments?.getInt("aniListId") ?: 0
+            ) { backStackEntry ->
+                val animeId = backStackEntry.arguments?.getInt("animeId") ?: -1
 
                 AnimeDetailScreen(
-                    aniListId = aniListId,
+                    animeId = animeId,                    // Fixed: changed from aniListId to animeId
                     onBack = { navController.popBackStack() },
                     onPlayEpisode = { episodeId, episodeTitle, episodeNumber ->
                         onPlayEpisode(episodeId, "$episodeTitle - Episode $episodeNumber")
