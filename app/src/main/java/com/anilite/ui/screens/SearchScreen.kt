@@ -51,14 +51,8 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
             delay(400)
             isLoading = true
             try {
-                val response = if (selectedGenre != null) {
-                    RetrofitClient.api.searchAdvanced(
-                        query = query.ifBlank { selectedGenre!! },
-                        genres = selectedGenre?.lowercase()
-                    )
-                } else {
-                    RetrofitClient.api.search(query)
-                }
+                val searchQuery = if (query.isNotBlank()) query else selectedGenre ?: ""
+                val response = RetrofitClient.api.search(searchQuery)
                 results = response.data?.animes ?: emptyList()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -80,7 +74,6 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
             modifier = Modifier.padding(16.dp)
         )
 
-        // Search bar
         OutlinedTextField(
             value = query,
             onValueChange = { query = it; doSearch() },
@@ -102,7 +95,6 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {
 
         Spacer(Modifier.height(10.dp))
 
-        // Genre filter chips
         Row(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
