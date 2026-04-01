@@ -31,18 +31,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             AnidakuTheme {
                 AnidakuApp(
-                    onPlayEpisode = { animeId, ep ->
-                        startActivity(
-                            Intent(this, PlayerActivity::class.java).apply {
-                                putExtra("animeId", animeId)
-                                putExtra("ep", ep)
-                            }
-                        )
-                    }
-                )
-            }
+                    onPlayEpisode = { _, episodeId ->
+    startActivity(
+        Intent(this, PlayerActivity::class.java).apply {
+            putExtra("episodeId", episodeId)
         }
-    }
+    )
 }
 
 @Composable
