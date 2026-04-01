@@ -13,7 +13,7 @@ data class EpisodeCount(
 // ── Home ──────────────────────────────────────────────────────────────────
 
 data class HomeResponse(
-    @SerializedName("spotLightAnimes") val spotlightAnimes: List<SpotlightAnime> = emptyList(), // ✅ capital L — matches real API
+    @SerializedName("spotLightAnimes") val spotlightAnimes: List<SpotlightAnime> = emptyList(),
     @SerializedName("trendingAnimes")     val trendingAnimes:     List<BasicAnime>     = emptyList(),
     @SerializedName("latestEpisodes")     val latestEpisodes:     List<AnimeItem>      = emptyList(),
     @SerializedName("top10Animes")        val top10Animes:        Top10Animes?         = null,
@@ -32,7 +32,7 @@ data class SpotlightAnime(
     @SerializedName("quality")     val quality: String?    = null,
     @SerializedName("category")    val category: String?   = null,
     @SerializedName("releasedDay") val releasedDay: String? = null,
-    @SerializedName("description") val description: String? = null // ✅ real API uses "description" (no 's')
+    @SerializedName("description") val description: String? = null
 )
 
 data class AnimeItem(
@@ -118,7 +118,7 @@ data class AnimeMoreInfo(
     @SerializedName("Duration:")  val duration:  String?      = null,
     @SerializedName("Status:")    val status:    String?      = null,
     @SerializedName("MAL Score:") val malScore:  String?      = null,
-    @SerializedName("Studios:")   val studios:   String?      = null, // ✅ real API returns a plain String e.g. "Toei Animation"
+    @SerializedName("Studios:")   val studios:   String?      = null,
     @SerializedName("Genres")     val genres:    List<String> = emptyList(),
     @SerializedName("Producers")  val producers: List<String> = emptyList()
 )
