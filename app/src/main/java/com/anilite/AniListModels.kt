@@ -52,5 +52,10 @@ data class AniListSearchResult(
     val totalPages: Int
 )
 
-// Episodes from your old API (unchanged)
-// Uses existing Episode + EpisodesResponse data classes
+data class Episode(
+    val id: Int,
+    val number: Int,
+    val title: String? = null,
+    val thumbnail: String? = null,
+    val url: String? = null
+)
