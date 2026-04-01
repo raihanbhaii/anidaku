@@ -1,7 +1,6 @@
 package com.anilite.data
 
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
@@ -10,42 +9,41 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 interface ApiService {
-    @GET("hianime/home")
+
+    @GET("aniwatch/home")
     suspend fun getHome(): HomeResponse
 
-    @GET("hianime/search")
+    @GET("aniwatch/search")
     suspend fun search(
-        @Query("q") query: String,
+        @Query("keyword") query: String,
         @Query("page") page: Int = 1
     ): SearchResponse
 
-    @GET("hianime/search/advanced")
-    suspend fun searchAdvanced(
-        @Query("q") query: String,
-        @Query("genres") genres: String? = null,
-        @Query("page") page: Int = 1
-    ): SearchResponse
+    @GET("aniwatch/anime/{id}")
+    suspend fun getAnimeDetail(@Path("id") id: String): AnimeDetailResponse
 
-    @GET("hianime/anime/{animeId}")
-    suspend fun getAnimeDetail(@Path("animeId") animeId: String): AnimeDetailResponse
+    @GET("aniwatch/episodes/{id}")
+    suspend fun getEpisodes(@Path("id") id: String): EpisodesResponse
 
-    @GET("hianime/anime/{animeId}/episodes")
-    suspend fun getEpisodes(@Path("animeId") animeId: String): EpisodesResponse
+    @GET("aniwatch/servers")
+    suspend fun getServers(@Query("id") episodeId: String): ServersResponse
 
-    @GET("hianime/episode/servers")
-    suspend fun getServers(@Query("animeEpisodeId") animeEpisodeId: String): ServersResponse
-
-    @GET("hianime/episode/sources")
+    @GET("aniwatch/episode-srcs")
     suspend fun getSources(
-        @Query("animeEpisodeId") animeEpisodeId: String,
-        @Query("ep") ep: String,
+        @Query("id") episodeId: String,
         @Query("server") server: String = "hd-1",
         @Query("category") category: String = "sub"
     ): SourcesResponse
+
+    @GET("aniwatch/{category}")
+    suspend fun getCategory(
+        @Path("category") category: String,
+        @Query("page") page: Int = 1
+    ): SearchResponse
 }
 
 object RetrofitClient {
-    private const val BASE_URL = "https://anidaku-api.vercel.app/api/v2/"
+    private const val BASE_URL = "https://anidexz-api.vercel.app/"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
