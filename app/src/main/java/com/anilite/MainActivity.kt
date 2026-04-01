@@ -107,21 +107,30 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                 )
             }
             composable("search") {
-                // SearchScreen still uses old API string ID for now
-                // we will update this separately
-                SearchScreen(onAnimeClick = { aniwatchId ->
-                    navController.navigate("detail/0?aniwatchId=$aniwatchId")
-                })
+                SearchScreen(
+                    onAnimeClick = { aniListId, aniwatchId ->
+                        navController.navigate(
+                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
+                        )
+                    }
+                )
             }
             composable("watchlist") {
-                WatchlistScreen(onAnimeClick = { aniwatchId ->
-                    navController.navigate("detail/0?aniwatchId=$aniwatchId")
-                })
+                WatchlistScreen(
+                    onAnimeClick = { aniListId, aniwatchId ->
+                        navController.navigate(
+                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
+                        )
+                    }
+                )
             }
             composable(
                 route = "detail/{aniListId}?aniwatchId={aniwatchId}",
                 arguments = listOf(
-                    navArgument("aniListId") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("aniListId") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
                     navArgument("aniwatchId") {
                         type = NavType.StringType
                         nullable = true
@@ -137,7 +146,9 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
                     aniListId = aniListId,
                     aniwatchId = aniwatchId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = { _, epId, title -> onPlayEpisode(epId, title) }
+                    onPlayEpisode = { _, epId, title ->
+                        onPlayEpisode(epId, title)
+                    }
                 )
             }
         }
