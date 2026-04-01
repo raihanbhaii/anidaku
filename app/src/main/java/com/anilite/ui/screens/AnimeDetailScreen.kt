@@ -3,7 +3,6 @@ package com.anilite.ui.screens
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -25,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.anilite.data.AniListAnime
+import com.anilite.data.AniListRelatedAnime
 import com.anilite.data.AniListRepository
+import com.anilite.data.Character
+import com.anilite.data.VoiceActor
 import com.anilite.data.WatchlistAnime
 import com.anilite.data.WatchlistManager
 import com.anilite.ui.theme.Purple40
@@ -47,7 +49,6 @@ fun AnimeDetailScreen(
 
     LaunchedEffect(aniListId) {
         try {
-            // Get full detail from AniList
             anime = AniListRepository.getDetail(aniListId)
             inWatchlist = WatchlistManager.isInWatchlist(context, aniListId.toString())
         } catch (e: Exception) {
@@ -72,9 +73,7 @@ fun AnimeDetailScreen(
     }
 
     val airedEpisodes = info.nextAiringEpisode?.episode?.minus(1) ?: info.episodes
-    val totalEpisodes = info.episodes
     val isAiring = info.status == "RELEASING"
-    val isFinished = info.status == "FINISHED"
 
     LazyColumn(
         modifier = Modifier
@@ -92,8 +91,7 @@ fun AnimeDetailScreen(
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
-                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)),
-                            startY = 120f
+                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)), startY = 120f
                         )
                     )
                 )
@@ -130,26 +128,15 @@ fun AnimeDetailScreen(
 
         item {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = info.title,
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                // Title English if available
+                Text(info.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+
                 info.titleEnglish?.takeIf { it != info.title }?.let {
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = it,
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
+                    Text(it, color = Color.Gray, fontSize = 14.sp)
                 }
-                
+
                 Spacer(Modifier.height(8.dp))
 
-                // Stats Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -163,7 +150,6 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Episode Info
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -172,22 +158,21 @@ fun AnimeDetailScreen(
                     airedEpisodes?.let {
                         EpisodeStatChip(
                             icon = Icons.Default.PlayArrow,
-                            text = "$it / ${totalEpisodes ?: "?"} episodes aired"
+                            text = "$it / ${info.episodes ?: "?"} episodes aired"
                         )
                     }
                     if (isAiring && info.nextAiringEpisode != null) {
                         val nextDate = Date(info.nextAiringEpisode!!.airingAt * 1000)
-                        val dateFormat = SimpleDateFormat("MMM dd", Locale.getDefault())
+                        val fmt = SimpleDateFormat("MMM dd", Locale.getDefault())
                         EpisodeStatChip(
                             icon = Icons.Default.PlayArrow,
-                            text = "Next: Ep ${info.nextAiringEpisode!!.episode} (${dateFormat.format(nextDate)})"
+                            text = "Next: Ep ${info.nextAiringEpisode!!.episode} (${fmt.format(nextDate)})"
                         )
                     }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                // Genres
                 if (info.genres.isNotEmpty()) {
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -208,7 +193,6 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Description
                 info.description?.takeIf { it.isNotEmpty() }?.let { desc ->
                     var expanded by remember { mutableStateOf(false) }
                     Text(
@@ -230,23 +214,21 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Tabs
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
                     contentColor = Purple40
                 ) {
-                    val tabs = listOf("Episodes", "Characters", "Voice Actors", "Relations")
-                    tabs.forEachIndexed { index, title ->
+                    listOf("Episodes", "Characters", "Voice Actors", "Relations").forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
-                            text = { 
+                            text = {
                                 Text(
-                                    title, 
+                                    title,
                                     color = if (selectedTab == index) Purple40 else Color.Gray,
                                     fontSize = 13.sp
-                                ) 
+                                )
                             }
                         )
                     }
@@ -256,126 +238,110 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Content based on selected tab
         when (selectedTab) {
-            0 -> {
-                // Episodes - Show aired episodes list
-                item {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        if (airedEpisodes != null && airedEpisodes > 0) {
+            0 -> item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    if (airedEpisodes != null && airedEpisodes > 0) {
+                        Text(
+                            "Aired Episodes",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        for (i in 1..airedEpisodes.coerceAtMost(50)) {
+                            EpisodeItem(episodeNumber = i, onClick = {
+                                onPlayEpisode("episode-$aniListId-$i", info.title, i)
+                            })
+                        }
+                        if (airedEpisodes > 50) {
                             Text(
-                                text = "Aired Episodes",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            for (i in 1..airedEpisodes.coerceAtMost(50)) {
-                                EpisodeItem(
-                                    episodeNumber = i,
-                                    onClick = {
-                                        // For now, use a placeholder episode ID
-                                        // In a real implementation, you'd get this from your streaming source
-                                        val episodeId = "episode-$aniListId-$i"
-                                        onPlayEpisode(episodeId, info.title, i)
-                                    }
-                                )
-                            }
-                            if (airedEpisodes > 50) {
-                                Text(
-                                    text = "+ ${airedEpisodes - 50} more episodes",
-                                    color = Color.Gray,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(vertical = 8.dp)
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "No episodes aired yet",
+                                "+ ${airedEpisodes - 50} more episodes",
                                 color = Color.Gray,
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(vertical = 16.dp)
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
+                    } else {
+                        Text(
+                            "No episodes aired yet",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
                     }
                 }
             }
-            1 -> {
-                // Characters
+
+            1 -> item {
                 if (info.characters.isNotEmpty()) {
-                    item {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(info.characters) { character ->
-                                CharacterCard(character = character)
-                            }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        info.characters.forEach { character ->
+                            CharacterCard(character = character)
                         }
-                        Spacer(Modifier.height(16.dp))
                     }
+                    Spacer(Modifier.height(16.dp))
                 } else {
-                    item {
-                        Text(
-                            text = "No character information available",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    Text(
+                        "No character information available",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
-            2 -> {
-                // Voice Actors
+
+            2 -> item {
                 if (info.voiceActors.isNotEmpty()) {
-                    item {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(info.voiceActors) { va ->
-                                VoiceActorCard(voiceActor = va)
-                            }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        info.voiceActors.forEach { va ->
+                            VoiceActorCard(voiceActor = va)
                         }
-                        Spacer(Modifier.height(16.dp))
                     }
+                    Spacer(Modifier.height(16.dp))
                 } else {
-                    item {
-                        Text(
-                            text = "No voice actor information available",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    Text(
+                        "No voice actor information available",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
-            3 -> {
-                // Relations
+
+            3 -> item {
                 if (info.relations.isNotEmpty()) {
-                    item {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(info.relations) { relation ->
-                                RelationCard(relation = relation)
-                            }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        info.relations.forEach { relation ->
+                            RelationCard(relation = relation)
                         }
-                        Spacer(Modifier.height(16.dp))
                     }
+                    Spacer(Modifier.height(16.dp))
                 } else {
-                    item {
-                        Text(
-                            text = "No related anime available",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                    Text(
+                        "No related anime available",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
         }
@@ -406,11 +372,7 @@ fun EpisodeStatChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text:
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Icon(icon, null, tint = Purple40, modifier = Modifier.size(12.dp))
-        Text(
-            text = text,
-            color = Color.White,
-            fontSize = 11.sp
-        )
+        Text(text, color = Color.White, fontSize = 11.sp)
     }
 }
 
@@ -429,26 +391,12 @@ fun EpisodeItem(episodeNumber: Int, onClick: () -> Unit) {
                 .background(SurfaceVariant, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "$episodeNumber",
-                color = Purple40,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("$episodeNumber", color = Purple40, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Episode $episodeNumber",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = "Aired",
-                color = Color.Gray,
-                fontSize = 11.sp
-            )
+            Text("Episode $episodeNumber", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("Aired", color = Color.Gray, fontSize = 11.sp)
         }
         Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(20.dp))
     }
@@ -456,12 +404,8 @@ fun EpisodeItem(episodeNumber: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun CharacterCard(character: com.anilite.data.Character) {
-    Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clickable { /* Navigate to character detail */ }
-    ) {
+fun CharacterCard(character: Character) {
+    Column(modifier = Modifier.width(120.dp)) {
         AsyncImage(
             model = character.image,
             contentDescription = character.name,
@@ -473,23 +417,13 @@ fun CharacterCard(character: com.anilite.data.Character) {
                 .background(Color.DarkGray)
         )
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = character.name,
-            color = Color.White,
-            fontSize = 12.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(character.name, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
-fun VoiceActorCard(voiceActor: com.anilite.data.VoiceActor) {
-    Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clickable { /* Navigate to voice actor detail */ }
-    ) {
+fun VoiceActorCard(voiceActor: VoiceActor) {
+    Column(modifier = Modifier.width(120.dp)) {
         AsyncImage(
             model = voiceActor.image,
             contentDescription = voiceActor.name,
@@ -501,30 +435,14 @@ fun VoiceActorCard(voiceActor: com.anilite.data.VoiceActor) {
                 .background(Color.DarkGray)
         )
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = voiceActor.name,
-            color = Color.White,
-            fontSize = 12.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        voiceActor.language?.let {
-            Text(
-                text = it,
-                color = Purple40,
-                fontSize = 10.sp
-            )
-        }
+        Text(voiceActor.name, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        voiceActor.language?.let { Text(it, color = Purple40, fontSize = 10.sp) }
     }
 }
 
 @Composable
-fun RelationCard(relation: com.anilite.data.RelatedAnime) {
-    Column(
-        modifier = Modifier
-            .width(140.dp)
-            .clickable { /* Navigate to related anime */ }
-    ) {
+fun RelationCard(relation: AniListRelatedAnime) {
+    Column(modifier = Modifier.width(140.dp)) {
         AsyncImage(
             model = relation.img,
             contentDescription = relation.name,
@@ -536,19 +454,7 @@ fun RelationCard(relation: com.anilite.data.RelatedAnime) {
                 .background(Color.DarkGray)
         )
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = relation.name,
-            color = Color.White,
-            fontSize = 12.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        relation.relationType?.let {
-            Text(
-                text = it,
-                color = Purple40,
-                fontSize = 10.sp
-            )
-        }
+        Text(relation.name, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        relation.relationType?.let { Text(it, color = Purple40, fontSize = 10.sp) }
     }
 }
