@@ -22,7 +22,10 @@ data class AniListAnime(
     val endDate: FuzzyDate? = null,
     val popularity: Int? = null,
     val favourites: Int? = null,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val characters: List<Character> = emptyList(),
+    val voiceActors: List<VoiceActor> = emptyList(),
+    val relations: List<RelatedAnime> = emptyList()
 )
 
 data class NextAiring(
@@ -45,11 +48,31 @@ data class FuzzyDate(
     }
 }
 
+data class Character(
+    val id: Int,
+    val name: String,
+    val image: String? = null,
+    val description: String? = null
+)
+
+data class VoiceActor(
+    val id: Int,
+    val name: String,
+    val image: String? = null,
+    val language: String? = null
+)
+
+data class RelatedAnime(
+    val id: String,
+    val name: String,
+    val img: String? = null,
+    val category: String? = null,
+    val relationType: String? = null
+)
+
 data class AniListSearchResult(
     val animes: List<AniListAnime>,
     val hasNextPage: Boolean,
     val currentPage: Int,
     val totalPages: Int
 )
-
-// Episode class is NOT here anymore - it's now only in Models.kt
