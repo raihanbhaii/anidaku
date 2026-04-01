@@ -88,7 +88,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 
         val data = homeData ?: return@Column
 
-        // Spotlight Carousel
+        // Spotlight
         if (data.spotlightAnimes.isNotEmpty()) {
             SpotlightCarousel(
                 animes = data.spotlightAnimes,
@@ -99,33 +99,25 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 
         // Trending
         if (data.trendingAnimes.isNotEmpty()) {
-            AniwatchAnimeRow(
-                title = "Trending",
-                animes = data.trendingAnimes,
-                onAnimeClick = onAnimeClick
-            )
+            AniwatchAnimeRow("Trending", data.trendingAnimes, onAnimeClick)
         }
 
         // Currently Airing
         data.featuredAnimes?.topAiringAnimes?.let {
-            if (it.isNotEmpty()) {
-                AniwatchAnimeRow(title = "Currently Airing", animes = it, onAnimeClick = onAnimeClick)
-            }
+            if (it.isNotEmpty()) AniwatchAnimeRow("Currently Airing", it, onAnimeClick)
         }
 
         // Most Popular
         data.featuredAnimes?.mostPopularAnimes?.let {
-            if (it.isNotEmpty()) {
-                AniwatchAnimeRow(title = "Most Popular", animes = it, onAnimeClick = onAnimeClick)
-            }
+            if (it.isNotEmpty()) AniwatchAnimeRow("Most Popular", it, onAnimeClick)
         }
 
         // Upcoming
         if (data.topUpcomingAnimes.isNotEmpty()) {
-            AniwatchAnimeRow(title = "Upcoming", animes = data.topUpcomingAnimes, onAnimeClick = onAnimeClick)
+            AniwatchAnimeRow("Upcoming", data.topUpcomingAnimes, onAnimeClick)
         }
 
-        if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() &&
+        if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() && 
             data.topUpcomingAnimes.isEmpty() && errorMsg.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,10 +170,7 @@ fun SpotlightCarousel(
 
                 Box(
                     modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0xDD0A0A0F)),
-                            startY = 80f
-                        )
+                        Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD0A0A0F)), startY = 80f)
                     )
                 )
 
@@ -236,11 +225,11 @@ fun SpotlightCarousel(
     }
 }
 
-// ====================== Anime Row ======================
+// ====================== Reusable Anime Row ======================
 @Composable
 fun AniwatchAnimeRow(
     title: String,
-    animes: List<Any>,           // Can accept BasicAnime, AnimeItem, SpotlightAnime, etc.
+    animes: List<Any>,
     onAnimeClick: (String) -> Unit
 ) {
     if (animes.isEmpty()) return
@@ -258,13 +247,45 @@ fun AniwatchAnimeRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(animes, key = { (it as? SpotlightAnime)?.id ?: (it as? BasicAnime)?.id ?: (it as? AnimeItem)?.id ?: "" }) { item ->
+            items(animes, key = { item ->
                 when (item) {
-                    is SpotlightAnime -> AniwatchAnimeCard(item.id, item.name, item.img, item.episodes?.eps)
-                    is BasicAnime -> AniwatchAnimeCard(item.id, item.name, item.img, null)
-                    is AnimeItem -> AniwatchAnimeCard(item.id, item.name, item.img, item.episodes?.eps)
-                    else -> {}
+                    is SpotlightAnime -> item.id
+                    is BasicAnime -> item.id
+                    is AnimeItem -> item.id
+                    else -> ""
                 }
+            }) { item ->
+                val id = when (item) {
+                    is SpotlightAnime -> item.id
+                    is BasicAnime -> item.id
+                    is AnimeItem -> item.id
+                    else -> ""
+                }
+                val name = when (item) {
+                    is SpotlightAnime -> item.name
+                    is BasicAnime -> item.name
+                    is AnimeItem -> item.name
+                    else -> ""
+                }
+                val img = when (item) {
+                    is SpotlightAnime -> item.img
+                    is BasicAnime -> item.img
+                    is AnimeItem -> item.img
+                    else -> ""
+                }
+                val eps = when (item) {
+                    is SpotlightAnime -> item.episodes?.eps
+                    is AnimeItem -> item.episodes?.eps
+                    else -> null
+                }
+
+                AniwatchAnimeCard(
+                    id = id,
+                    name = name,
+                    img = img,
+                    episodeCount = eps,
+                    onClick = { onAnimeClick(id) }
+                )
             }
         }
     }
@@ -276,12 +297,13 @@ fun AniwatchAnimeCard(
     id: String,
     name: String,
     img: String,
-    episodeCount: Int?
+    episodeCount: Int?,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .width(110.dp)
-            .clickable { /* onAnimeClick will be handled in parent */ }
+            .clickable(onClick = onClick)
     ) {
         AsyncImage(
             model = img,
