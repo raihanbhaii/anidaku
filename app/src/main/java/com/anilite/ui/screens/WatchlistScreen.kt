@@ -1,6 +1,7 @@
 package com.anilite.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -65,11 +66,12 @@ fun WatchlistScreen(onAnimeClick: (String) -> Unit) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(CardBg, RoundedCornerShape(8.dp))
                             .clip(RoundedCornerShape(8.dp))
+                            .background(CardBg)
+                            .clickable { onAnimeClick(anime.id) }
                     ) {
                         AsyncImage(
-                            model = anime.poster,
+                            model = anime.img,          // ← was anime.poster
                             contentDescription = anime.name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
