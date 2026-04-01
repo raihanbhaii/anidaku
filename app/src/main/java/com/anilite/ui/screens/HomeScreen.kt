@@ -39,21 +39,20 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
 
     LaunchedEffect(Unit) {
         try {
-            val trendingResponse = AniListRepository.getTrending()
-            trending = trendingResponse?.animes ?: emptyList()
+            val trendingResult = AniListRepository.getTrending()
+            trending = trendingResult.animes
             
-            val airingResponse = AniListRepository.getAiring()
-            airing = airingResponse?.animes ?: emptyList()
+            val airingResult = AniListRepository.getAiring()
+            airing = airingResult.animes
             
-            val popularResponse = AniListRepository.getPopular()
-            popular = popularResponse?.animes ?: emptyList()
+            val popularResult = AniListRepository.getPopular()
+            popular = popularResult.animes
             
-            val upcomingResponse = AniListRepository.getUpcoming()
-            upcoming = upcomingResponse?.animes ?: emptyList()
+            val upcomingResult = AniListRepository.getUpcoming()
+            upcoming = upcomingResult.animes
             
         } catch (e: Exception) {
             e.printStackTrace()
-            // Set empty lists on error
             trending = emptyList()
             airing = emptyList()
             popular = emptyList()
@@ -108,7 +107,6 @@ fun HomeScreen(onAnimeClick: (aniListId: Int, aniwatchId: String?) -> Unit) {
             AniListAnimeRow(title = "Upcoming", animes = upcoming, onAnimeClick = { onAnimeClick(it.id, null) })
         }
 
-        // Show message if all lists are empty
         if (trending.isEmpty() && airing.isEmpty() && popular.isEmpty() && upcoming.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -192,7 +190,6 @@ fun SpotlightCarousel(animes: List<AniListAnime>, onAnimeClick: (AniListAnime) -
                         )
                     }
                 }
-                // aired episodes badge
                 val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
                 aired?.let {
                     if (it > 0) {
@@ -282,7 +279,6 @@ fun AniListAnimeCard(anime: AniListAnime, onClick: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        // Show aired episodes count
         val aired = anime.nextAiringEpisode?.let { it.episode - 1 } ?: anime.episodes
         aired?.let {
             if (it > 0) {
