@@ -31,10 +31,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             AnidakuTheme {
                 AnidakuApp(
-                    onPlayEpisode = { _, episodeId ->
+                    onPlayEpisode = { _, episodeId, episodeTitle ->
     startActivity(
         Intent(this, PlayerActivity::class.java).apply {
             putExtra("episodeId", episodeId)
+            putExtra("episodeTitle", episodeTitle)
         }
     )
 }
