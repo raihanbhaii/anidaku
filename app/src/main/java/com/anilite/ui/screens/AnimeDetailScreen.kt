@@ -96,7 +96,7 @@ fun AnimeDetailScreen(
                     )
                 )
                 IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
-                    Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+                    Icon(ArrowBack, null, tint = Color.White)
                 }
                 IconButton(
                     onClick = {
@@ -162,11 +162,11 @@ fun AnimeDetailScreen(
                         )
                     }
                     if (isAiring && info.nextAiringEpisode != null) {
-                        val nextDate = Date(info.nextAiringEpisode!!.airingAt * 1000)
+                        val nextDate = Date(info.nextAiringEpisode.airingAt * 1000)
                         val fmt = SimpleDateFormat("MMM dd", Locale.getDefault())
                         EpisodeStatChip(
                             icon = Icons.Default.PlayArrow,
-                            text = "Next: Ep ${info.nextAiringEpisode!!.episode} (${fmt.format(nextDate)})"
+                            text = "Next: Ep ${info.nextAiringEpisode.episode} (${fmt.format(nextDate)})"
                         )
                     }
                 }
