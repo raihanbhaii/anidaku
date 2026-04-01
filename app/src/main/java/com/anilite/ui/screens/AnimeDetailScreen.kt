@@ -26,16 +26,14 @@ import coil.compose.AsyncImage
 import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import com.anilite.ui.theme.SurfaceVariant
-import kotlinx.coroutines.launch
 
 @Composable
 fun AnimeDetailScreen(
-    animeId: String,                    // Aniwatch slug (e.g. "one-piece-100")
+    animeId: String,                    // Aniwatch slug
     onBack: () -> Unit,
     onPlayEpisode: (playerUrl: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     var animeDetail by remember { mutableStateOf<AnimeDetailResponse?>(null) }
     var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
@@ -54,7 +52,7 @@ fun AnimeDetailScreen(
 
             inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
-            errorMsg = "${e::class.simpleName}: ${e.message ?: "Failed to load"}"
+            errorMsg = "${e::class.simpleName}: ${e.message ?: "Failed to load anime"}"
             e.printStackTrace()
         } finally {
             isLoading = false
@@ -68,12 +66,12 @@ fun AnimeDetailScreen(
         return
     }
 
-    if (errorMsg.isNotEmpty() || animeDetail == null) {
+    if (errorMsg.isNotEmpty() || animeDetail?.info == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(errorMsg.ifEmpty { "Failed to load anime" }, color = Color.Red)
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { /* retry logic */ }) {
+                Button(onClick = { /* You can add retry logic here later */ }) {
                     Text("Retry")
                 }
             }
@@ -89,7 +87,7 @@ fun AnimeDetailScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header Image + Buttons
+        // Header with Banner + Buttons
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
@@ -101,7 +99,8 @@ fun AnimeDetailScreen(
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
-                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)), startY = 120f
+                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)), 
+                            startY = 120f
                         )
                     )
                 )
@@ -138,7 +137,7 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Title & Info
+        // Title & Basic Info
         item {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(info.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -212,16 +211,16 @@ fun AnimeDetailScreen(
                             EpisodeItem(
                                 episode = ep,
                                 onClick = {
-                                    // Build MegaPlay URL using Aniwatch episode ID
-                                    val epIdNumber = ep.episodeId.substringAfter("?ep=")
-                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
-
-                                    onPlayEpisode(playerUrl, ep.name, ep.episodeNo)
+                                    val epIdNumber = ep.episodeId.substringAfter("?ep=", "")
+                                    if (epIdNumber.isNotEmpty()) {
+                                        val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
+                                        onPlayEpisode(playerUrl, ep.name ?: "Episode ${ep.episodeNo}", ep.episodeNo)
+                                    }
                                 }
                             )
                         }
                     } else {
-                        Text("No episodes available", color = Color.Gray, modifier = Modifier.padding(16.dp))
+                        Text("No episodes available yet", color = Color.Gray, modifier = Modifier.padding(16.dp))
                     }
                 }
             }
@@ -230,8 +229,7 @@ fun AnimeDetailScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("More Information", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Coming soon...", color = Color.Gray)
-                    // You can later add moreInfo, genres, etc. from animeDetail
+                    Text("More details (studios, genres, etc.) will be added soon...", color = Color.Gray)
                 }
             }
         }
@@ -240,7 +238,7 @@ fun AnimeDetailScreen(
     }
 }
 
-// Episode Item with MegaPlay
+// Episode Item
 @Composable
 fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
     Row(
@@ -262,7 +260,12 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(episode.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(
+                text = episode.name ?: "Episode ${episode.episodeNo}",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
             Text("Episode ${episode.episodeNo}", color = Color.Gray, fontSize = 12.sp)
         }
 
