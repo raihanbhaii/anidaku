@@ -32,12 +32,18 @@ class MainActivity : ComponentActivity() {
             AnidakuTheme {
                 AnidakuApp(
                     onPlayEpisode = { episodeId: String, episodeTitle: String ->
-                        startActivity(
-                            Intent(this, PlayerActivity::class.java).apply {
-                                putExtra("episodeId", episodeId)
-                                putExtra("episodeTitle", episodeTitle)
-                            }
-                        )
+                        // For now, just show a message - you can add streaming later
+                        // startActivity(
+                        //     Intent(this, PlayerActivity::class.java).apply {
+                        //         putExtra("episodeId", episodeId)
+                        //         putExtra("episodeTitle", episodeTitle)
+                        //     }
+                        // )
+                        android.widget.Toast.makeText(
+                            this,
+                            "Streaming coming soon! Episode: $episodeTitle",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }
@@ -99,55 +105,41 @@ fun AnidakuApp(onPlayEpisode: (String, String) -> Unit) {
         ) {
             composable("home") {
                 HomeScreen(
-                    onAnimeClick = { aniListId, aniwatchId ->
-                        navController.navigate(
-                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
-                        )
+                    onAnimeClick = { aniListId ->
+                        navController.navigate("detail/$aniListId")
                     }
                 )
             }
             composable("search") {
                 SearchScreen(
-                    onAnimeClick = { aniListId, aniwatchId ->
-                        navController.navigate(
-                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
-                        )
+                    onAnimeClick = { aniListId ->
+                        navController.navigate("detail/$aniListId")
                     }
                 )
             }
             composable("watchlist") {
                 WatchlistScreen(
-                    onAnimeClick = { aniListId, aniwatchId ->
-                        navController.navigate(
-                            "detail/$aniListId?aniwatchId=${aniwatchId ?: ""}"
-                        )
+                    onAnimeClick = { aniListId ->
+                        navController.navigate("detail/$aniListId")
                     }
                 )
             }
             composable(
-                route = "detail/{aniListId}?aniwatchId={aniwatchId}",
+                route = "detail/{aniListId}",
                 arguments = listOf(
                     navArgument("aniListId") {
                         type = NavType.IntType
                         defaultValue = 0
-                    },
-                    navArgument("aniwatchId") {
-                        type = NavType.StringType
-                        nullable = true
-                        defaultValue = null
                     }
                 )
             ) { backStack ->
                 val aniListId = backStack.arguments?.getInt("aniListId") ?: 0
-                val aniwatchId = backStack.arguments?.getString("aniwatchId")
-                    ?.takeIf { it.isNotEmpty() }
 
                 AnimeDetailScreen(
                     aniListId = aniListId,
-                    aniwatchId = aniwatchId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = { _, epId, title ->
-                        onPlayEpisode(epId, title)
+                    onPlayEpisode = { _, episodeId, title ->
+                        onPlayEpisode(episodeId, title)
                     }
                 )
             }
