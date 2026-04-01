@@ -29,7 +29,7 @@ import com.anilite.ui.theme.SurfaceVariant
 
 @Composable
 fun AnimeDetailScreen(
-    animeId: String,                    // Aniwatch slug
+    animeId: Int,                                   // Changed to Int to match MainActivity
     onBack: () -> Unit,
     onPlayEpisode: (playerUrl: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
@@ -43,35 +43,49 @@ fun AnimeDetailScreen(
     var errorMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(animeId) {
+        if (animeId == -1) {
+            errorMsg = "Invalid anime ID"
+            isLoading = false
+            return@LaunchedEffect
+        }
+
         isLoading = true
         errorMsg = ""
+
         try {
-            animeDetail = AniwatchRepository.getAnimeDetail(animeId)
-            val episodesResponse = AniwatchRepository.getEpisodes(animeId)
+            val detailResponse = AniApiService.getAnimeDetail(animeId.toString())
+            animeDetail = detailResponse
+
+            val episodesResponse = AniApiService.getEpisodes(animeId.toString())
             episodes = episodesResponse.episodes
 
-            inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
+            inWatchlist = WatchlistManager.isInWatchlist(context, animeId.toString())
         } catch (e: Exception) {
-            errorMsg = "${e::class.simpleName}: ${e.message ?: "Failed to load anime"}"
+            errorMsg = "Failed to load anime: ${e.message ?: e::class.simpleName}"
             e.printStackTrace()
         } finally {
             isLoading = false
         }
     }
 
+    // Loading State
     if (isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Purple40)
         }
         return
     }
 
+    // Error State
     if (errorMsg.isNotEmpty() || animeDetail?.info == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(errorMsg.ifEmpty { "Failed to load anime" }, color = Color.Red)
+                Text(
+                    text = errorMsg.ifEmpty { "Failed to load anime" },
+                    color = Color.Red
+                )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { /* You can add retry logic here later */ }) {
+                Button(onClick = { /* Add retry logic here if needed */ }) {
                     Text("Retry")
                 }
             }
@@ -79,7 +93,7 @@ fun AnimeDetailScreen(
         return
     }
 
-    val info = animeDetail!!.info
+    val info = animeDetail!!.info!!
     val episodeList = episodes
 
     LazyColumn(
@@ -87,7 +101,7 @@ fun AnimeDetailScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header with Banner + Buttons
+        // Header with Banner
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
@@ -96,33 +110,34 @@ fun AnimeDetailScreen(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
+
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
-                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)), 
+                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)),
                             startY = 120f
                         )
                     )
                 )
 
+                // Back Button
                 IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
 
+                // Watchlist Button
                 IconButton(
                     onClick = {
+                        val watchlistAnime = WatchlistAnime(
+                            id = animeId.toString(),
+                            name = info.name,
+                            img = info.img,
+                            type = info.category
+                        )
                         if (inWatchlist) {
-                            WatchlistManager.removeFromWatchlist(context, animeId)
+                            WatchlistManager.removeFromWatchlist(context, animeId.toString())
                         } else {
-                            WatchlistManager.addToWatchlist(
-                                context,
-                                WatchlistAnime(
-                                    id = animeId,
-                                    name = info.name,
-                                    img = info.img,
-                                    type = info.category ?: "TV"
-                                )
-                            )
+                            WatchlistManager.addToWatchlist(context, watchlistAnime)
                         }
                         inWatchlist = !inWatchlist
                     },
@@ -137,10 +152,15 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Title & Basic Info
+        // Title & Info
         item {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(info.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = info.name,
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
                 Spacer(Modifier.height(8.dp))
 
@@ -186,7 +206,12 @@ fun AnimeDetailScreen(
                         Tab(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
-                            text = { Text(title, color = if (selectedTab == index) Purple40 else Color.Gray) }
+                            text = {
+                                Text(
+                                    title,
+                                    color = if (selectedTab == index) Purple40 else Color.Gray
+                                )
+                            }
                         )
                     }
                 }
@@ -194,42 +219,61 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Episodes Tab
+        // Content based on selected tab
         when (selectedTab) {
-            0 -> item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    if (episodeList.isNotEmpty()) {
+            0 -> { // Episodes Tab
+                if (episodeList.isNotEmpty()) {
+                    item {
                         Text(
                             "All Episodes (${episodeList.size})",
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
-
-                        episodeList.forEach { ep ->
-                            EpisodeItem(
-                                episode = ep,
-                                onClick = {
-                                    val epIdNumber = ep.episodeId.substringAfter("?ep=", "")
-                                    if (epIdNumber.isNotEmpty()) {
-                                        val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
-                                        onPlayEpisode(playerUrl, ep.name ?: "Episode ${ep.episodeNo}", ep.episodeNo)
-                                    }
+                    }
+                    items(episodeList.size) { index ->
+                        val ep = episodeList[index]
+                        EpisodeItem(
+                            episode = ep,
+                            onClick = {
+                                val epIdNumber = ep.episodeId.substringAfter("?ep=", "")
+                                if (epIdNumber.isNotEmpty()) {
+                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epIdNumber/sub"
+                                    onPlayEpisode(
+                                        playerUrl,
+                                        ep.name ?: "Episode ${ep.episodeNo}",
+                                        ep.episodeNo
+                                    )
                                 }
-                            )
-                        }
-                    } else {
-                        Text("No episodes available yet", color = Color.Gray, modifier = Modifier.padding(16.dp))
+                            }
+                        )
+                    }
+                } else {
+                    item {
+                        Text(
+                            "No episodes available yet",
+                            color = Color.Gray,
+                            modifier = Modifier.padding(16.dp)
+                        )
                     }
                 }
             }
-
-            1 -> item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("More Information", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("More details (studios, genres, etc.) will be added soon...", color = Color.Gray)
+            1 -> { // More Info Tab
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "More Information",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "More details (studios, genres, etc.) will be added soon...",
+                            color = Color.Gray
+                        )
+                    }
                 }
             }
         }
@@ -245,7 +289,7 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 10.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -254,7 +298,12 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
                 .background(SurfaceVariant, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text("${episode.episodeNo}", color = Purple40, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "${episode.episodeNo}",
+                color = Purple40,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         Spacer(Modifier.width(14.dp))
@@ -266,10 +315,19 @@ fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
-            Text("Episode ${episode.episodeNo}", color = Color.Gray, fontSize = 12.sp)
+            Text(
+                "Episode ${episode.episodeNo}",
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
         }
 
-        Icon(Icons.Default.PlayArrow, null, tint = Purple40, modifier = Modifier.size(22.dp))
+        Icon(
+            Icons.Default.PlayArrow,
+            null,
+            tint = Purple40,
+            modifier = Modifier.size(22.dp)
+        )
     }
     HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
 }
@@ -282,6 +340,6 @@ fun StatChip(text: String) {
         fontSize = 11.sp,
         modifier = Modifier
             .background(SurfaceVariant, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     )
 }
