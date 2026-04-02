@@ -5,15 +5,13 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 
 class AniwatchRepository {
-
     private val client = NetworkClient.client
-    private val baseUrl = "https://anidexz-api.vercel.app/aniwatch"   // ← Correct base URL
+    private val baseUrl = "https://anidexz-api.vercel.app/aniwatch"
 
-    // Search anime
     suspend fun searchAnime(query: String): List<AnimeItem> {
         return try {
             client.get("$baseUrl/search") {
-                parameter("keyword", query)   // This API uses "keyword"
+                parameter("keyword", query)
             }.body<SearchResponse>().animes
         } catch (e: Exception) {
             e.printStackTrace()
@@ -21,23 +19,27 @@ class AniwatchRepository {
         }
     }
 
-    // Get full anime details (this was causing crash)
     suspend fun getAnimeDetails(animeId: String): AnimeDetailResponse? {
         return try {
-            client.get("$baseUrl/anime/$animeId").body()
+            val response = client.get("$baseUrl/anime/$animeId")
+            val status = response.status.value
+            if (status != 200) throw Exception("HTTP $status from detail API")
+            response.body()
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            throw e  // re-throw so DetailScreen shows the real error
         }
     }
 
-    // Get episodes list
     suspend fun getEpisodes(animeId: String): EpisodesResponse? {
         return try {
-            client.get("$baseUrl/episodes/$animeId").body()
+            val response = client.get("$baseUrl/episodes/$animeId")
+            val status = response.status.value
+            if (status != 200) throw Exception("HTTP $status from episodes API")
+            response.body()
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            null  // episodes failing is non-fatal
         }
     }
 }
