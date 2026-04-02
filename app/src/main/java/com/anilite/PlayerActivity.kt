@@ -3,6 +3,7 @@ package com.anilite
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -53,31 +57,50 @@ data class StreamData(
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val episodeId = intent.getStringExtra("episodeId") ?: ""
-        val category = intent.getStringExtra("category") ?: "sub"
+        // --- TRUE FULLSCREEN: hide status bar + nav bar ---
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+
+        val episodeId    = intent.getStringExtra("episodeId")    ?: ""
+        val category     = intent.getStringExtra("category")     ?: "sub"
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
         val episodeNumber = intent.getIntExtra("episodeNumber", 0)
 
         setContent {
             AnidakuTheme {
                 PlayerScreen(
-                    episodeId = episodeId,
-                    category = category,
-                    episodeTitle = episodeTitle,
+                    episodeId     = episodeId,
+                    category      = category,
+                    episodeTitle  = episodeTitle,
                     episodeNumber = episodeNumber,
-                    onBack = { finish() }
+                    onBack        = { finish() }
                 )
             }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            // Re-hide system bars if user swipes them in temporarily
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 }
 
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     val animeEpisodeId = episodeId.substringBefore("?ep=")
-    val ep = episodeId.substringAfterLast("ep=")
+    val ep             = episodeId.substringAfterLast("ep=")
 
     val url = "https://anidaku-api.vercel.app/api/v2/hianime/episode/sources" +
         "?animeEpisodeId=$animeEpisodeId&ep=$ep&server=hd-1&category=$category"
@@ -86,12 +109,12 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         URL(url).openConnection().apply {
             setRequestProperty("User-Agent", "Mozilla/5.0")
             connectTimeout = 15000
-            readTimeout = 15000
+            readTimeout    = 15000
         }.getInputStream().bufferedReader().readText()
     }
 
-    val json = JSONObject(response)
-    val m3u8 = json.getString("source")
+    val json    = JSONObject(response)
+    val m3u8    = json.getString("source")
     val referer = json.optString("refer", "https://megacloud.club/")
 
     val intro = json.optJSONObject("skip")
@@ -107,9 +130,9 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     }
 
     return StreamData(
-        m3u8Url = m3u8,
-        referer = referer,
-        introEnd = intro * 1000L,
+        m3u8Url     = m3u8,
+        referer     = referer,
+        introEnd    = intro * 1000L,
         subtitleUrl = subtitleUrl
     )
 }
@@ -125,36 +148,38 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
 
-    var streamData by remember { mutableStateOf<StreamData?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMsg by remember { mutableStateOf("") }
-    var showControls by remember { mutableStateOf(true) }
-    var showSkipIntro by remember { mutableStateOf(false) }
-    var currentPosition by remember { mutableStateOf(0L) }
+    var streamData       by remember { mutableStateOf<StreamData?>(null) }
+    var isLoading        by remember { mutableStateOf(true) }
+    var isBuffering      by remember { mutableStateOf(false) }
+    var errorMsg         by remember { mutableStateOf("") }
+    var showControls     by remember { mutableStateOf(true) }
+    var showSkipIntro    by remember { mutableStateOf(false) }
+    var currentPosition  by remember { mutableStateOf(0L) }
 
+    // Fetch stream URL
     LaunchedEffect(episodeId, category) {
         isLoading = true
-        errorMsg = ""
+        errorMsg  = ""
         try {
             streamData = fetchStreamData(episodeId, category)
         } catch (e: Exception) {
             try {
                 val animeEpisodeId = episodeId.substringBefore("?ep=")
-                val ep = episodeId.substringAfterLast("ep=")
+                val ep             = episodeId.substringAfterLast("ep=")
                 val url = "https://anidaku-api.vercel.app/api/v2/hianime/episode/sources" +
                     "?animeEpisodeId=$animeEpisodeId&ep=$ep&server=hd-2&category=$category"
                 val response = withContext(Dispatchers.IO) {
                     URL(url).openConnection().apply {
                         setRequestProperty("User-Agent", "Mozilla/5.0")
                         connectTimeout = 15000
-                        readTimeout = 15000
+                        readTimeout    = 15000
                     }.getInputStream().bufferedReader().readText()
                 }
                 val json = JSONObject(response)
                 streamData = StreamData(
-                    m3u8Url = json.getString("source"),
-                    referer = json.optString("refer", "https://megacloud.club/"),
-                    introEnd = (json.optJSONObject("skip")
+                    m3u8Url     = json.getString("source"),
+                    referer     = json.optString("refer", "https://megacloud.club/"),
+                    introEnd    = (json.optJSONObject("skip")
                         ?.optJSONObject("intro")
                         ?.optLong("end", 0L) ?: 0L) * 1000L,
                     subtitleUrl = null
@@ -167,6 +192,7 @@ fun PlayerScreen(
         }
     }
 
+    // Auto-hide controls
     LaunchedEffect(showControls) {
         if (showControls) {
             delay(3000)
@@ -176,12 +202,13 @@ fun PlayerScreen(
 
     val exoPlayer = remember { mutableStateOf<ExoPlayer?>(null) }
 
+    // Build ExoPlayer once streamData is ready
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
         val dataSourceFactory = DefaultHttpDataSource.Factory().apply {
             setDefaultRequestProperties(mapOf(
-                "Referer" to data.referer,
-                "Origin" to data.referer.trimEnd('/'),
+                "Referer"    to data.referer,
+                "Origin"     to data.referer.trimEnd('/'),
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             ))
         }
@@ -202,17 +229,21 @@ fun PlayerScreen(
                 override fun onPlayerError(error: PlaybackException) {
                     errorMsg = "Playback error: ${error.message}"
                 }
-                override fun onIsPlayingChanged(isPlaying: Boolean) {}
+                // Track buffering state so we can show spinner on seek
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    isBuffering = playbackState == Player.STATE_BUFFERING
+                }
             })
         }
         exoPlayer.value = player
     }
 
+    // Position + skip-intro polling
     LaunchedEffect(exoPlayer.value) {
         val player = exoPlayer.value ?: return@LaunchedEffect
         while (true) {
             delay(500)
-            val pos = player.currentPosition
+            val pos      = player.currentPosition
             currentPosition = pos
             val introEnd = streamData?.introEnd ?: 0L
             showSkipIntro = introEnd > 0 && pos < introEnd && pos > 0
@@ -233,6 +264,7 @@ fun PlayerScreen(
             .background(Color.Black)
     ) {
         when {
+            // ── Initial stream-fetch loading ──────────────────────────────
             isLoading -> {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
@@ -244,6 +276,7 @@ fun PlayerScreen(
                 }
             }
 
+            // ── Error state ───────────────────────────────────────────────
             errorMsg.isNotEmpty() -> {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
@@ -258,34 +291,50 @@ fun PlayerScreen(
                 }
             }
 
+            // ── Player ready ──────────────────────────────────────────────
             streamData != null && exoPlayer.value != null -> {
-                // ExoPlayer View
+
+                // Video surface
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
-                            player = exoPlayer.value
+                            player        = exoPlayer.value
                             useController = false
                         }
                     },
-                    update = { view ->
-                        view.player = exoPlayer.value
-                    },
+                    update  = { view -> view.player = exoPlayer.value },
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black)
                 )
 
-                // FIX: Use Modifier.clickable correctly on a Box
+                // Tap-to-toggle controls
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .clickable(
-                            indication = null,
+                            indication      = null,
                             interactionSource = remember { MutableInteractionSource() }
                         ) { showControls = !showControls }
                 )
 
-                // Controls overlay
+                // ── Buffering spinner (seek / network stall) ──────────────
+                if (isBuffering) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0x66000000)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color       = Color(0xFF9B59F5),
+                            strokeWidth = 3.dp,
+                            modifier    = Modifier.size(52.dp)
+                        )
+                    }
+                }
+
+                // ── Controls overlay ──────────────────────────────────────
                 if (showControls) {
                     Box(
                         modifier = Modifier
@@ -311,23 +360,23 @@ fun PlayerScreen(
                             Column {
                                 Text(
                                     episodeTitle,
-                                    color = Color.White,
-                                    fontSize = 15.sp,
+                                    color      = Color.White,
+                                    fontSize   = 15.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     "Episode $episodeNumber • ${category.uppercase()}",
-                                    color = Color.Gray,
+                                    color    = Color.Gray,
                                     fontSize = 12.sp
                                 )
                             }
                         }
 
-                        // Center play/pause + seek
+                        // Centre: seek-back / play-pause / seek-forward
                         Row(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalArrangement = Arrangement.spacedBy(32.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment     = Alignment.CenterVertically
                         ) {
                             IconButton(
                                 onClick = {
@@ -340,7 +389,7 @@ fun PlayerScreen(
                                 Icon(
                                     Icons.Default.Replay10,
                                     contentDescription = "-10s",
-                                    tint = Color.White,
+                                    tint     = Color.White,
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
@@ -349,16 +398,14 @@ fun PlayerScreen(
                             IconButton(
                                 onClick = {
                                     if (isPlaying) exoPlayer.value?.pause()
-                                    else exoPlayer.value?.play()
+                                    else           exoPlayer.value?.play()
                                 },
                                 modifier = Modifier.size(64.dp)
                             ) {
-                                // FIX: Use Icons.Default.Pause and Icons.Default.PlayArrow directly
                                 Icon(
-                                    if (isPlaying) Icons.Default.Pause
-                                    else Icons.Default.PlayArrow,
+                                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = "Play/Pause",
-                                    tint = Color.White,
+                                    tint     = Color.White,
                                     modifier = Modifier.size(48.dp)
                                 )
                             }
@@ -374,7 +421,7 @@ fun PlayerScreen(
                                 Icon(
                                     Icons.Default.Forward10,
                                     contentDescription = "+10s",
-                                    tint = Color.White,
+                                    tint     = Color.White,
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
@@ -389,13 +436,13 @@ fun PlayerScreen(
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {
                             Slider(
-                                value = currentPosition.toFloat() / duration.toFloat(),
+                                value         = currentPosition.toFloat() / duration.toFloat(),
                                 onValueChange = { fraction ->
                                     exoPlayer.value?.seekTo((fraction * duration).toLong())
                                 },
                                 colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF9B59F5),
-                                    activeTrackColor = Color(0xFF9B59F5),
+                                    thumbColor        = Color(0xFF9B59F5),
+                                    activeTrackColor  = Color(0xFF9B59F5),
                                     inactiveTrackColor = Color(0xFF444444)
                                 )
                             )
@@ -403,16 +450,8 @@ fun PlayerScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(
-                                    formatTime(currentPosition),
-                                    color = Color.White,
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    formatTime(duration),
-                                    color = Color.White,
-                                    fontSize = 11.sp
-                                )
+                                Text(formatTime(currentPosition), color = Color.White, fontSize = 11.sp)
+                                Text(formatTime(duration),        color = Color.White, fontSize = 11.sp)
                             }
                         }
                     }
@@ -428,9 +467,7 @@ fun PlayerScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 24.dp, bottom = 80.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF9B59F5)
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))
                     ) {
                         Text("Skip Intro ⏭", color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -442,9 +479,9 @@ fun PlayerScreen(
 
 fun formatTime(ms: Long): String {
     val totalSeconds = ms / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
+    val hours        = totalSeconds / 3600
+    val minutes      = (totalSeconds % 3600) / 60
+    val seconds      = totalSeconds % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
     else "%02d:%02d".format(minutes, seconds)
 }
