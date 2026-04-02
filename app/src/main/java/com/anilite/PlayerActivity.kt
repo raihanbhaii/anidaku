@@ -1,224 +1,456 @@
 package com.anilite
 
-import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.webkit.WebChromeClient
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.ui.PlayerView
 import com.anilite.ui.theme.AnidakuTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.URL
+
+data class StreamData(
+    val m3u8Url: String,
+    val referer: String,
+    val introEnd: Long,
+    val subtitleUrl: String?
+)
 
 class PlayerActivity : ComponentActivity() {
-
-    private var customView: View? = null
-    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
 
-        val playerUrl = intent.getStringExtra("playerUrl") ?: ""
+        val episodeId = intent.getStringExtra("episodeId") ?: ""
+        val category = intent.getStringExtra("category") ?: "sub"
+        val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
+        val episodeNumber = intent.getIntExtra("episodeNumber", 0)
 
         setContent {
             AnidakuTheme {
                 PlayerScreen(
-                    playerUrl = playerUrl,
-                    onBack = { finish() },
-                    onShowCustomView = { view, callback ->
-                        customView = view
-                        customViewCallback = callback
-                        val decorView = window.decorView as ViewGroup
-                        decorView.addView(
-                            view,
-                            ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        )
-                        @Suppress("DEPRECATION")
-                        window.decorView.systemUiVisibility = (
-                            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        )
-                    },
-                    onHideCustomView = {
-                        val decorView = window.decorView as ViewGroup
-                        customView?.let { decorView.removeView(it) }
-                        customView = null
-                        customViewCallback?.onCustomViewHidden()
-                        customViewCallback = null
-                        @Suppress("DEPRECATION")
-                        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                    }
+                    episodeId = episodeId,
+                    category = category,
+                    episodeTitle = episodeTitle,
+                    episodeNumber = episodeNumber,
+                    onBack = { finish() }
                 )
             }
         }
     }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (customView != null) {
-            val decorView = window.decorView as ViewGroup
-            customView?.let { decorView.removeView(it) }
-            customView = null
-            customViewCallback?.onCustomViewHidden()
-            customViewCallback = null
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-        } else {
-            super.onBackPressed()
-        }
-    }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
+    // episodeId is like "one-piece-100?ep=84802"
+    val animeEpisodeId = episodeId.substringBefore("?ep=")
+    val ep = episodeId.substringAfterLast("ep=")
+
+    val url = "https://anidaku-api.vercel.app/api/v2/hianime/episode/sources" +
+        "?animeEpisodeId=$animeEpisodeId&ep=$ep&server=hd-1&category=$category"
+
+    val response = withContext(Dispatchers.IO) {
+        URL(url).openConnection().apply {
+            setRequestProperty("User-Agent", "Mozilla/5.0")
+            connectTimeout = 15000
+            readTimeout = 15000
+        }.getInputStream().bufferedReader().readText()
+    }
+
+    val json = JSONObject(response)
+    val m3u8 = json.getString("source")
+    val referer = json.optString("refer", "https://megacloud.club/")
+
+    val intro = json.optJSONObject("skip")
+        ?.optJSONObject("intro")
+        ?.optLong("end", 0L) ?: 0L
+
+    val subtitleUrl = json.optJSONArray("tracks")?.let { tracks ->
+        (0 until tracks.length()).map { tracks.getJSONObject(it) }
+            .firstOrNull {
+                it.optBoolean("default") &&
+                it.optString("kind") == "captions"
+            }?.optString("file")
+    }
+
+    return StreamData(
+        m3u8Url = m3u8,
+        referer = referer,
+        introEnd = intro * 1000L, // convert to ms
+        subtitleUrl = subtitleUrl
+    )
+}
+
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
-    playerUrl: String,
-    onBack: () -> Unit,
-    onShowCustomView: (View, WebChromeClient.CustomViewCallback) -> Unit,
-    onHideCustomView: () -> Unit
+    episodeId: String,
+    category: String,
+    episodeTitle: String,
+    episodeNumber: Int,
+    onBack: () -> Unit
 ) {
-    var webView by remember { mutableStateOf<WebView?>(null) }
+    val context = LocalContext.current
 
-    BackHandler {
-        if (webView?.canGoBack() == true) {
-            webView?.goBack()
-        } else {
-            onBack()
+    var streamData by remember { mutableStateOf<StreamData?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMsg by remember { mutableStateOf("") }
+    var showControls by remember { mutableStateOf(true) }
+    var showSkipIntro by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0L) }
+
+    // Try hd-1 first, fallback to hd-2
+    LaunchedEffect(episodeId, category) {
+        isLoading = true
+        errorMsg = ""
+        try {
+            streamData = fetchStreamData(episodeId, category)
+        } catch (e: Exception) {
+            try {
+                // fallback to hd-2
+                val animeEpisodeId = episodeId.substringBefore("?ep=")
+                val ep = episodeId.substringAfterLast("ep=")
+                val url = "https://anidaku-api.vercel.app/api/v2/hianime/episode/sources" +
+                    "?animeEpisodeId=$animeEpisodeId&ep=$ep&server=hd-2&category=$category"
+                val response = withContext(Dispatchers.IO) {
+                    URL(url).openConnection().apply {
+                        setRequestProperty("User-Agent", "Mozilla/5.0")
+                        connectTimeout = 15000
+                        readTimeout = 15000
+                    }.getInputStream().bufferedReader().readText()
+                }
+                val json = JSONObject(response)
+                streamData = StreamData(
+                    m3u8Url = json.getString("source"),
+                    referer = json.optString("refer", "https://megacloud.club/"),
+                    introEnd = (json.optJSONObject("skip")
+                        ?.optJSONObject("intro")
+                        ?.optLong("end", 0L) ?: 0L) * 1000L,
+                    subtitleUrl = null
+                )
+            } catch (e2: Exception) {
+                errorMsg = "Failed to load stream: ${e2.message}"
+            }
+        } finally {
+            isLoading = false
         }
     }
 
-    // The iframe HTML — baseURL must match megaplay.buzz so the embed referrer check passes
-    val htmlContent = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body {
-                    background: #000;
-                    width: 100%;
-                    height: 100%;
-                    overflow: hidden;
+    // Auto-hide controls after 3 seconds
+    LaunchedEffect(showControls) {
+        if (showControls) {
+            delay(3000)
+            showControls = false
+        }
+    }
+
+    val exoPlayer = remember { mutableStateOf<ExoPlayer?>(null) }
+
+    // Build ExoPlayer when streamData is ready
+    LaunchedEffect(streamData) {
+        val data = streamData ?: return@LaunchedEffect
+        val dataSourceFactory = DefaultHttpDataSource.Factory().apply {
+            setDefaultRequestProperties(mapOf(
+                "Referer" to data.referer,
+                "Origin" to data.referer.trimEnd('/'),
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            ))
+        }
+
+        val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(
+                MediaItem.Builder()
+                    .setUri(data.m3u8Url)
+                    .setMimeType(MimeTypes.APPLICATION_M3U8)
+                    .build()
+            )
+
+        val player = ExoPlayer.Builder(context).build().apply {
+            setMediaSource(mediaSource)
+            prepare()
+            playWhenReady = true
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    errorMsg = "Playback error: ${error.message}"
                 }
-                iframe {
-                    position: absolute;
-                    top: 0; left: 0;
-                    width: 100%;
-                    height: 100%;
-                    border: none;
-                }
-            </style>
-        </head>
-        <body>
-            <iframe
-                src="$playerUrl"
-                frameborder="0"
-                scrolling="no"
-                allowfullscreen
-                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            ></iframe>
-        </body>
-        </html>
-    """.trimIndent()
+                override fun onIsPlayingChanged(isPlaying: Boolean) {}
+            })
+        }
+        exoPlayer.value = player
+    }
+
+    // Track position for intro skip
+    LaunchedEffect(exoPlayer.value) {
+        val player = exoPlayer.value ?: return@LaunchedEffect
+        while (true) {
+            delay(500)
+            val pos = player.currentPosition
+            currentPosition = pos
+            val introEnd = streamData?.introEnd ?: 0L
+            showSkipIntro = introEnd > 0 && pos < introEnd && pos > 0
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.value?.release()
+            (context as? Activity)?.requestedOrientation =
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        AndroidView(
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    webView = this
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
+        when {
+            isLoading -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF9B59F5))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Loading stream...", color = Color.White, fontSize = 14.sp)
+                }
+            }
 
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        databaseEnabled = true
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
-                        mediaPlaybackRequiresUserGesture = false
-                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        allowContentAccess = true
-                        allowFileAccess = true
-                        cacheMode = WebSettings.LOAD_DEFAULT
-                        setSupportMultipleWindows(true)
-                        javaScriptCanOpenWindowsAutomatically = true
-                        // Desktop user agent so megaplay doesn't serve a broken mobile page
-                        userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/122.0.0.0 Safari/537.36"
-                    }
+            errorMsg.isNotEmpty() -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(errorMsg, color = Color.Red, fontSize = 13.sp)
+                    Button(
+                        onClick = onBack,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))
+                    ) { Text("Go Back") }
+                }
+            }
 
-                    val cookieManager = CookieManager.getInstance()
-                    cookieManager.setAcceptCookie(true)
-                    cookieManager.setAcceptThirdPartyCookies(this, true)
+            streamData != null && exoPlayer.value != null -> {
+                // ExoPlayer View
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer.value
+                            useController = false // we use custom controls
+                        }
+                    },
+                    update = { view ->
+                        view.player = exoPlayer.value
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                )
 
-                    webChromeClient = object : WebChromeClient() {
-                        override fun onShowCustomView(
-                            view: View?,
-                            callback: CustomViewCallback?
+                // Tap to show/hide controls
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Transparent)
+                ) {
+                    androidx.compose.foundation.clickable(
+                        indication = null,
+                        interactionSource = remember {
+                            androidx.compose.foundation.interaction.MutableInteractionSource()
+                        }
+                    ) { showControls = !showControls }
+                        .let { /* handled via Modifier below */ }
+                }
+
+                // Controls overlay
+                if (showControls) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0x88000000))
+                    ) {
+                        // Top bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                                .align(Alignment.TopStart),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (view != null && callback != null) {
-                                onShowCustomView(view, callback)
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    episodeTitle,
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Episode $episodeNumber • ${category.uppercase()}",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
                             }
                         }
 
-                        override fun onHideCustomView() {
-                            onHideCustomView()
+                        // Center play/pause + seek
+                        Row(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalArrangement = Arrangement.spacedBy(32.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    exoPlayer.value?.seekTo(
+                                        (exoPlayer.value!!.currentPosition - 10000).coerceAtLeast(0)
+                                    )
+                                },
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Replay10,
+                                    contentDescription = "-10s",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+
+                            val isPlaying = exoPlayer.value?.isPlaying == true
+                            IconButton(
+                                onClick = {
+                                    if (isPlaying) exoPlayer.value?.pause()
+                                    else exoPlayer.value?.play()
+                                },
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Icon(
+                                    if (isPlaying) androidx.compose.material.icons.Icons.Default.Pause
+                                    else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    exoPlayer.value?.seekTo(
+                                        exoPlayer.value!!.currentPosition + 10000
+                                    )
+                                },
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Forward10,
+                                    contentDescription = "+10s",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+
+                        // Bottom progress bar
+                        val duration = exoPlayer.value?.duration?.takeIf { it > 0 } ?: 1L
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Slider(
+                                value = currentPosition.toFloat() / duration.toFloat(),
+                                onValueChange = { fraction ->
+                                    exoPlayer.value?.seekTo((fraction * duration).toLong())
+                                },
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF9B59F5),
+                                    activeTrackColor = Color(0xFF9B59F5),
+                                    inactiveTrackColor = Color(0xFF444444)
+                                )
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    formatTime(currentPosition),
+                                    color = Color.White,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    formatTime(duration),
+                                    color = Color.White,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
-
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView?,
-                            request: WebResourceRequest?
-                        ): Boolean {
-                            // Allow all navigation inside the WebView
-                            return false
-                        }
-                    }
-
-                    // KEY FIX: baseUrl = megaplay.buzz so the iframe embed referrer check passes
-                    loadDataWithBaseURL(
-                        "https://megaplay.buzz/",
-                        htmlContent,
-                        "text/html",
-                        "UTF-8",
-                        null
-                    )
                 }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+
+                // Skip Intro button
+                if (showSkipIntro) {
+                    Button(
+                        onClick = {
+                            streamData?.introEnd?.let { exoPlayer.value?.seekTo(it) }
+                            showSkipIntro = false
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 24.dp, bottom = 80.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF9B59F5)
+                        )
+                    ) {
+                        Text("Skip Intro ⏭", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
+}
+
+fun formatTime(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%02d:%02d".format(minutes, seconds)
 }
