@@ -9,7 +9,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.SentimentDissatisfied
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,6 +48,7 @@ fun AnimeDetailScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var loadTrigger by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf("sub") }
+    var episodeSearchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(animeId, loadTrigger) {
         if (animeId.isBlank()) {
@@ -98,7 +103,12 @@ fun AnimeDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(32.dp)
             ) {
-                Text("😕", fontSize = 40.sp)
+                Icon(
+                    imageVector = Icons.Default.SentimentDissatisfied,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(48.dp)
+                )
                 Text(
                     text = errorMsg.ifEmpty { "Failed to load anime" },
                     color = Color.Red,
@@ -127,11 +137,29 @@ fun AnimeDetailScreen(
     val episodeList = episodesResponse?.episodes ?: emptyList()
     val hasDub = (info.episodes?.dubInt ?: 0) > 0
 
+    val filteredEpisodes = remember(episodeSearchQuery, episodeList) {
+        if (episodeSearchQuery.isBlank()) {
+            episodeList
+        } else {
+            val query = episodeSearchQuery.trim()
+            val byNumber = query.toIntOrNull()
+            episodeList.filter { ep ->
+                if (byNumber != null) {
+                    ep.episodeNo == byNumber
+                } else {
+                    ep.name?.contains(query, ignoreCase = true) == true ||
+                    ep.episodeNo.toString().contains(query)
+                }
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Header Banner
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
@@ -199,6 +227,7 @@ fun AnimeDetailScreen(
             }
         }
 
+        // Title & Info
         item {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -246,6 +275,7 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(16.dp))
 
+                // Sub / Dub Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -327,31 +357,130 @@ fun AnimeDetailScreen(
             }
         }
 
+        // Episodes Tab
         when (selectedTab) {
             0 -> {
                 if (episodeList.isNotEmpty()) {
                     item {
-                        Text(
-                            "All Episodes (${episodeList.size})",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    items(episodeList) { ep ->
-                        EpisodeItem(
-                            episode = ep,
-                            onClick = {
-                                val playerUrl =
-                                    "https://megaplay.buzz/stream/s-2/${ep.episodeId}/$selectedCategory"
-                                onPlayEpisode(
-                                    playerUrl,
-                                    ep.name ?: "Episode ${ep.episodeNo}",
-                                    ep.episodeNo
+                        var searchVisible by remember { mutableStateOf(false) }
+
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (episodeSearchQuery.isBlank())
+                                        "All Episodes (${episodeList.size})"
+                                    else
+                                        "Results (${filteredEpisodes.size})",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
+                                IconButton(onClick = {
+                                    searchVisible = !searchVisible
+                                    if (!searchVisible) episodeSearchQuery = ""
+                                }) {
+                                    Icon(
+                                        if (searchVisible) Icons.Default.Close else Icons.Default.Search,
+                                        contentDescription = "Search episodes",
+                                        tint = Purple40
+                                    )
+                                }
                             }
-                        )
+
+                            if (searchVisible) {
+                                OutlinedTextField(
+                                    value = episodeSearchQuery,
+                                    onValueChange = { episodeSearchQuery = it },
+                                    placeholder = {
+                                        Text(
+                                            "Search by episode number or name...",
+                                            color = Color(0xFF555570),
+                                            fontSize = 13.sp
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = Color.Gray,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (episodeSearchQuery.isNotBlank()) {
+                                            IconButton(onClick = { episodeSearchQuery = "" }) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Clear",
+                                                    tint = Color.Gray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Purple40,
+                                        unfocusedBorderColor = Color(0xFF2A2A3A),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        cursorColor = Purple40,
+                                        focusedContainerColor = Color(0xFF1C1C28),
+                                        unfocusedContainerColor = Color(0xFF1C1C28)
+                                    )
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                    }
+
+                    if (filteredEpisodes.isNotEmpty()) {
+                        items(filteredEpisodes, key = { it.episodeId }) { ep ->
+                            EpisodeItem(
+                                episode = ep,
+                                onClick = {
+                                    val playerUrl =
+                                        "https://megaplay.buzz/stream/s-2/${ep.episodeId}/$selectedCategory"
+                                    onPlayEpisode(
+                                        playerUrl,
+                                        ep.name ?: "Episode ${ep.episodeNo}",
+                                        ep.episodeNo
+                                    )
+                                }
+                            )
+                        }
+                    } else {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SearchOff,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Text(
+                                        "No episodes found for \"$episodeSearchQuery\"",
+                                        color = Color.Gray,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
                     }
                 } else {
                     item {
