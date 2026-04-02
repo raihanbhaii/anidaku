@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -15,7 +17,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
@@ -24,12 +29,8 @@ import com.anilite.ui.theme.AnidakuTheme
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Keep the screen on during playback
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         val playerUrl = intent.getStringExtra("playerUrl") ?: ""
-
         setContent {
             AnidakuTheme {
                 PlayerScreen(
@@ -47,8 +48,7 @@ fun PlayerScreen(
     playerUrl: String,
     onBack: () -> Unit
 ) {
-    // We remember the WebView so we can handle back-navigation within the web history
-    var webView: WebView? = null
+    var webView by remember { mutableStateOf<WebView?>(null) }
 
     BackHandler {
         if (webView?.canGoBack() == true) {
@@ -72,7 +72,6 @@ fun PlayerScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
 
-                    // Essential configurations for video streaming sites
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -81,18 +80,33 @@ fun PlayerScreen(
                         useWideViewPort = true
                         mediaPlaybackRequiresUserGesture = false
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        
-                        // Using a Desktop-like User Agent often fixes video loading issues
+                        allowContentAccess = true
+                        allowFileAccess = true
+                        cacheMode = WebSettings.LOAD_NO_CACHE
                         userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
                     }
 
-                    // Handles navigation within the WebView
-                    webViewClient = WebViewClient()
+                    // Enable cookies — required by most streaming sites
+                    CookieManager.getInstance().apply {
+                        setAcceptCookie(true)
+                        setAcceptThirdPartyCookies(this@apply, true)
+                    }
 
-                    // WebChromeClient is CRITICAL for rendering video players (HTML5)
                     webChromeClient = WebChromeClient()
 
-                    loadUrl(playerUrl)
+                    // Send referer header so megaplay.buzz doesn't block the request
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): Boolean {
+                            request?.url?.let { view?.loadUrl(it.toString()) }
+                            return true
+                        }
+                    }
+
+                    // Load with referer header pointing to megaplay.buzz itself
+                    loadUrl(playerUrl, mapOf("Referer" to "https://megaplay.buzz/"))
                 }
             },
             modifier = Modifier.fillMaxSize()
