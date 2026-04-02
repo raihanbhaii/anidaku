@@ -43,8 +43,6 @@ fun AnimeDetailScreen(
     var inWatchlist by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
     var loadTrigger by remember { mutableStateOf(0) }
-
-    // ✅ Sub/Dub selection lives here now
     var selectedCategory by remember { mutableStateOf("sub") }
 
     LaunchedEffect(animeId, loadTrigger) {
@@ -54,12 +52,25 @@ fun AnimeDetailScreen(
             return@LaunchedEffect
         }
 
+        if (loadTrigger == 0 && AnimeDetailCache.isCacheValid(animeId)) {
+            animeDetail = AnimeDetailCache.getDetail(animeId)
+            episodesResponse = AnimeDetailCache.getEpisodes(animeId)
+            inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
+            isLoading = false
+            return@LaunchedEffect
+        }
+
         isLoading = true
         errorMsg = ""
 
         try {
-            animeDetail = repository.getAnimeDetails(animeId)
-            episodesResponse = repository.getEpisodes(animeId)
+            val detail = repository.getAnimeDetails(animeId)
+            val episodes = repository.getEpisodes(animeId)
+            if (detail != null) {
+                AnimeDetailCache.save(animeId, detail, episodes)
+            }
+            animeDetail = detail
+            episodesResponse = episodes
             inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
             errorMsg = "Failed to load: ${e.message ?: e::class.simpleName}"
@@ -69,7 +80,6 @@ fun AnimeDetailScreen(
         }
     }
 
-    // Loading State
     if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -81,7 +91,6 @@ fun AnimeDetailScreen(
         return
     }
 
-    // Error State
     if (errorMsg.isNotEmpty() || animeDetail?.info == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
@@ -116,8 +125,6 @@ fun AnimeDetailScreen(
 
     val info = animeDetail!!.info!!
     val episodeList = episodesResponse?.episodes ?: emptyList()
-
-    // Check if dub is available
     val hasDub = (info.episodes?.dubInt ?: 0) > 0
 
     LazyColumn(
@@ -125,7 +132,6 @@ fun AnimeDetailScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header Banner
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
@@ -145,12 +151,10 @@ fun AnimeDetailScreen(
                         )
                 )
 
-                // Back Button
                 IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
 
-                // Watchlist Button
                 IconButton(
                     onClick = {
                         val watchlistAnime = WatchlistAnime(
@@ -177,7 +181,6 @@ fun AnimeDetailScreen(
                     )
                 }
 
-                // Episode badge
                 info.episodes?.epsInt?.let { eps ->
                     if (eps > 0) {
                         Text(
@@ -196,7 +199,6 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Title & Info
         item {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -221,7 +223,6 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Description
                 if (info.description.isNotBlank()) {
                     var expanded by remember { mutableStateOf(false) }
                     Text(
@@ -245,24 +246,18 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ✅ Sub / Dub Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "Audio",
-                        color = Color.Gray,
-                        fontSize = 13.sp
-                    )
+                    Text("Audio", color = Color.Gray, fontSize = 13.sp)
                     Row(
                         modifier = Modifier
                             .background(Color(0xFF1C1C28), RoundedCornerShape(20.dp))
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        // SUB always available
                         listOf("sub", "dub").forEach { cat ->
                             val isSelected = selectedCategory == cat
                             val isDisabled = cat == "dub" && !hasDub
@@ -291,7 +286,6 @@ fun AnimeDetailScreen(
                     }
                 }
 
-                // Show dub episode count or unavailable message
                 Spacer(Modifier.height(4.dp))
                 if (!hasDub) {
                     Text(
@@ -333,7 +327,6 @@ fun AnimeDetailScreen(
             }
         }
 
-        // Episodes Tab
         when (selectedTab) {
             0 -> {
                 if (episodeList.isNotEmpty()) {
@@ -349,7 +342,6 @@ fun AnimeDetailScreen(
                     items(episodeList) { ep ->
                         EpisodeItem(
                             episode = ep,
-                            // ✅ Pass selectedCategory into the URL
                             onClick = {
                                 val playerUrl =
                                     "https://megaplay.buzz/stream/s-2/${ep.episodeId}/$selectedCategory"
