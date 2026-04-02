@@ -58,6 +58,35 @@ fun PlayerScreen(
         }
     }
 
+    val htmlContent = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { background: #000; width: 100%; height: 100vh; overflow: hidden; }
+                iframe {
+                    width: 100%;
+                    height: 100%;
+                    border: none;
+                    display: block;
+                }
+            </style>
+        </head>
+        <body>
+            <iframe
+                src="$playerUrl"
+                frameborder="0"
+                scrolling="no"
+                allowfullscreen
+                allow="autoplay; fullscreen; encrypted-media"
+            ></iframe>
+        </body>
+        </html>
+    """.trimIndent()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -86,7 +115,6 @@ fun PlayerScreen(
                         userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
                     }
 
-                    // Enable cookies — required by most streaming sites
                     CookieManager.getInstance().apply {
                         setAcceptCookie(true)
                         setAcceptThirdPartyCookies(this@apply, true)
@@ -94,19 +122,22 @@ fun PlayerScreen(
 
                     webChromeClient = WebChromeClient()
 
-                    // Send referer header so megaplay.buzz doesn't block the request
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): Boolean {
-                            request?.url?.let { view?.loadUrl(it.toString()) }
-                            return true
+                            return false
                         }
                     }
 
-                    // Load with referer header pointing to megaplay.buzz itself
-                    loadUrl(playerUrl, mapOf("Referer" to "https://megaplay.buzz/"))
+                    loadDataWithBaseURL(
+                        "https://megaplay.buzz/",
+                        htmlContent,
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
                 }
             },
             modifier = Modifier.fillMaxSize()
