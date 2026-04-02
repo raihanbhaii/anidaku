@@ -8,10 +8,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,7 +76,6 @@ class PlayerActivity : ComponentActivity() {
 }
 
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
-    // episodeId is like "one-piece-100?ep=84802"
     val animeEpisodeId = episodeId.substringBefore("?ep=")
     val ep = episodeId.substringAfterLast("ep=")
 
@@ -106,7 +109,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     return StreamData(
         m3u8Url = m3u8,
         referer = referer,
-        introEnd = intro * 1000L, // convert to ms
+        introEnd = intro * 1000L,
         subtitleUrl = subtitleUrl
     )
 }
@@ -129,7 +132,6 @@ fun PlayerScreen(
     var showSkipIntro by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
 
-    // Try hd-1 first, fallback to hd-2
     LaunchedEffect(episodeId, category) {
         isLoading = true
         errorMsg = ""
@@ -137,7 +139,6 @@ fun PlayerScreen(
             streamData = fetchStreamData(episodeId, category)
         } catch (e: Exception) {
             try {
-                // fallback to hd-2
                 val animeEpisodeId = episodeId.substringBefore("?ep=")
                 val ep = episodeId.substringAfterLast("ep=")
                 val url = "https://anidaku-api.vercel.app/api/v2/hianime/episode/sources" +
@@ -166,7 +167,6 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide controls after 3 seconds
     LaunchedEffect(showControls) {
         if (showControls) {
             delay(3000)
@@ -176,7 +176,6 @@ fun PlayerScreen(
 
     val exoPlayer = remember { mutableStateOf<ExoPlayer?>(null) }
 
-    // Build ExoPlayer when streamData is ready
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
         val dataSourceFactory = DefaultHttpDataSource.Factory().apply {
@@ -209,7 +208,6 @@ fun PlayerScreen(
         exoPlayer.value = player
     }
 
-    // Track position for intro skip
     LaunchedEffect(exoPlayer.value) {
         val player = exoPlayer.value ?: return@LaunchedEffect
         while (true) {
@@ -266,7 +264,7 @@ fun PlayerScreen(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
                             player = exoPlayer.value
-                            useController = false // we use custom controls
+                            useController = false
                         }
                     },
                     update = { view ->
@@ -277,20 +275,15 @@ fun PlayerScreen(
                         .background(Color.Black)
                 )
 
-                // Tap to show/hide controls
+                // FIX: Use Modifier.clickable correctly on a Box
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Transparent)
-                ) {
-                    androidx.compose.foundation.clickable(
-                        indication = null,
-                        interactionSource = remember {
-                            androidx.compose.foundation.interaction.MutableInteractionSource()
-                        }
-                    ) { showControls = !showControls }
-                        .let { /* handled via Modifier below */ }
-                }
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { showControls = !showControls }
+                )
 
                 // Controls overlay
                 if (showControls) {
@@ -360,8 +353,9 @@ fun PlayerScreen(
                                 },
                                 modifier = Modifier.size(64.dp)
                             ) {
+                                // FIX: Use Icons.Default.Pause and Icons.Default.PlayArrow directly
                                 Icon(
-                                    if (isPlaying) androidx.compose.material.icons.Icons.Default.Pause
+                                    if (isPlaying) Icons.Default.Pause
                                     else Icons.Default.PlayArrow,
                                     contentDescription = "Play/Pause",
                                     tint = Color.White,
