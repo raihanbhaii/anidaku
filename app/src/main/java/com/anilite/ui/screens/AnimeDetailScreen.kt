@@ -35,7 +35,7 @@ import com.anilite.ui.theme.SurfaceVariant
 fun AnimeDetailScreen(
     animeId: String,
     onBack: () -> Unit,
-    onPlayEpisode: (playerUrl: String, episodeTitle: String, episodeNumber: Int) -> Unit
+    onPlayEpisode: (episodeId: String, category: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember { AniwatchRepository() }
@@ -445,10 +445,10 @@ fun AnimeDetailScreen(
                             EpisodeItem(
                                 episode = ep,
                                 onClick = {
-                                    val epId = ep.episodeId.substringAfterLast("ep=")
-                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epId/$selectedCategory"
+                                    // KEY CHANGE: pass episodeId directly, no megaplay URL
                                     onPlayEpisode(
-                                        playerUrl,
+                                        ep.episodeId,  // e.g. "one-piece-100?ep=84802"
+                                        selectedCategory,
                                         ep.name ?: "Episode ${ep.episodeNo}",
                                         ep.episodeNo
                                     )
