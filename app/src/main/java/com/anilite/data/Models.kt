@@ -6,10 +6,14 @@ import kotlinx.serialization.Serializable
 // ── Shared ────────────────────────────────────────────────────────────────
 @Serializable
 data class EpisodeCount(
-    @SerialName("eps") val eps: Int? = null,
-    @SerialName("sub") val sub: Int? = null,
-    @SerialName("dub") val dub: Int? = null
-)
+    @SerialName("eps") val eps: Double? = null,
+    @SerialName("sub") val sub: Double? = null,
+    @SerialName("dub") val dub: Double? = null
+) {
+    val epsInt: Int? get() = eps?.toInt()?.takeIf { it in 1..9999 }
+    val subInt: Int? get() = sub?.toInt()?.takeIf { it in 1..9999 }
+    val dubInt: Int? get() = dub?.toInt()?.takeIf { it in 1..9999 }
+}
 
 // ── Home Response ─────────────────────────────────────────────────────────
 @Serializable
