@@ -119,14 +119,14 @@ data class AnimeInfo(
 
 @Serializable
 data class AnimeMoreInfo(
-    @SerialName("Japanese") val japanese: String? = null,
-    @SerialName("Synonyms") val synonyms: String? = null,
-    @SerialName("Aired") val aired: String? = null,
-    @SerialName("Premiered") val premiered: String? = null,
-    @SerialName("Duration") val duration: String? = null,
-    @SerialName("Status") val status: String? = null,
-    @SerialName("MAL Score") val malScore: String? = null,
-    @SerialName("Studios") val studios: String? = null,
+    @SerialName("Japanese:") val japanese: String? = null,
+    @SerialName("Synonyms:") val synonyms: String? = null,
+    @SerialName("Aired:") val aired: String? = null,
+    @SerialName("Premiered:") val premiered: String? = null,
+    @SerialName("Duration:") val duration: String? = null,
+    @SerialName("Status:") val status: String? = null,
+    @SerialName("MAL Score:") val malScore: String? = null,
+    @SerialName("Studios:") val studios: String? = null,
     @SerialName("Genres") val genres: List<String> = emptyList(),
     @SerialName("Producers") val producers: List<String> = emptyList()
 )
