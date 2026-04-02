@@ -42,7 +42,10 @@ fun AnimeDetailScreen(
     var errorMsg by remember { mutableStateOf("") }
     var inWatchlist by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
-    var loadTrigger by remember { mutableStateOf(0) }  // ✅ for retry
+    var loadTrigger by remember { mutableStateOf(0) }
+
+    // ✅ Sub/Dub selection lives here now
+    var selectedCategory by remember { mutableStateOf("sub") }
 
     LaunchedEffect(animeId, loadTrigger) {
         if (animeId.isBlank()) {
@@ -93,14 +96,12 @@ fun AnimeDetailScreen(
                     fontSize = 14.sp
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // ✅ Back button
                     OutlinedButton(
                         onClick = onBack,
                         border = BorderStroke(1.dp, Color.Gray)
                     ) {
                         Text("Go Back", color = Color.Gray)
                     }
-                    // ✅ Working retry button
                     Button(
                         onClick = { loadTrigger++ },
                         colors = ButtonDefaults.buttonColors(containerColor = Purple40)
@@ -116,12 +117,15 @@ fun AnimeDetailScreen(
     val info = animeDetail!!.info!!
     val episodeList = episodesResponse?.episodes ?: emptyList()
 
+    // Check if dub is available
+    val hasDub = (info.episodes?.dubInt ?: 0) > 0
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header with Banner
+        // Header Banner
         item {
             Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
                 AsyncImage(
@@ -142,10 +146,7 @@ fun AnimeDetailScreen(
                 )
 
                 // Back Button
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.padding(8.dp)
-                ) {
+                IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
 
@@ -176,7 +177,7 @@ fun AnimeDetailScreen(
                     )
                 }
 
-                // Episode count badge on banner
+                // Episode badge
                 info.episodes?.epsInt?.let { eps ->
                     if (eps > 0) {
                         Text(
@@ -244,6 +245,72 @@ fun AnimeDetailScreen(
 
                 Spacer(Modifier.height(16.dp))
 
+                // ✅ Sub / Dub Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Audio",
+                        color = Color.Gray,
+                        fontSize = 13.sp
+                    )
+                    Row(
+                        modifier = Modifier
+                            .background(Color(0xFF1C1C28), RoundedCornerShape(20.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        // SUB always available
+                        listOf("sub", "dub").forEach { cat ->
+                            val isSelected = selectedCategory == cat
+                            val isDisabled = cat == "dub" && !hasDub
+                            Text(
+                                text = cat.uppercase(),
+                                color = when {
+                                    isDisabled -> Color(0xFF555555)
+                                    isSelected -> Color.White
+                                    else -> Color.Gray
+                                },
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) Purple40 else Color.Transparent,
+                                        RoundedCornerShape(16.dp)
+                                    )
+                                    .then(
+                                        if (!isDisabled) Modifier.clickable {
+                                            selectedCategory = cat
+                                        } else Modifier
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Show dub episode count or unavailable message
+                Spacer(Modifier.height(4.dp))
+                if (!hasDub) {
+                    Text(
+                        "Dub not available for this anime",
+                        color = Color(0xFF555555),
+                        fontSize = 11.sp
+                    )
+                } else {
+                    val subCount = info.episodes?.subInt ?: 0
+                    val dubCount = info.episodes?.dubInt ?: 0
+                    Text(
+                        "SUB: $subCount eps  •  DUB: $dubCount eps",
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
@@ -282,9 +349,10 @@ fun AnimeDetailScreen(
                     items(episodeList) { ep ->
                         EpisodeItem(
                             episode = ep,
+                            // ✅ Pass selectedCategory into the URL
                             onClick = {
                                 val playerUrl =
-                                    "https://megaplay.buzz/stream/s-2/${ep.episodeId}/sub"
+                                    "https://megaplay.buzz/stream/s-2/${ep.episodeId}/$selectedCategory"
                                 onPlayEpisode(
                                     playerUrl,
                                     ep.name ?: "Episode ${ep.episodeNo}",
@@ -312,7 +380,6 @@ fun AnimeDetailScreen(
             }
 
             1 -> {
-                // More Info Tab
                 animeDetail?.moreInfo?.let { more ->
                     item {
                         Column(
