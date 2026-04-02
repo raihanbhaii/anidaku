@@ -30,21 +30,35 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(onAnimeClick: (String) -> Unit) {
-    var homeData by remember { mutableStateOf<HomeResponse?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    var homeData by remember { mutableStateOf<HomeResponse?>(HomeCache.cachedHome) }
+    var isLoading by remember { mutableStateOf(HomeCache.cachedHome == null) }
     var errorMsg by remember { mutableStateOf("") }
+    var isRefreshing by remember { mutableStateOf(false) }
     var loadTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(loadTrigger) {
-        isLoading = true
+        if (loadTrigger == 0 && HomeCache.isCacheValid()) {
+            homeData = HomeCache.cachedHome
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        if (loadTrigger > 0) isRefreshing = true
+        else isLoading = true
+
         errorMsg = ""
         try {
-            homeData = AniApiService.getHome()
+            val fresh = AniApiService.getHome()
+            HomeCache.save(fresh)
+            homeData = fresh
         } catch (e: Exception) {
-            errorMsg = "${e::class.simpleName}: ${e.message ?: "unknown error"}"
+            if (HomeCache.cachedHome == null) {
+                errorMsg = "${e::class.simpleName}: ${e.message ?: "unknown error"}"
+            }
             e.printStackTrace()
         } finally {
             isLoading = false
+            isRefreshing = false
         }
     }
 
@@ -61,17 +75,38 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             .verticalScroll(rememberScrollState())
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Text(
-            text = "Anidaku",
-            color = Purple40,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        // Title + Refresh button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Anidaku",
+                color = Purple40,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (isRefreshing) {
+                CircularProgressIndicator(
+                    color = Purple40,
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                TextButton(onClick = { loadTrigger++ }) {
+                    Text("Refresh", color = Purple40, fontSize = 12.sp)
+                }
+            }
+        }
 
         if (errorMsg.isNotEmpty()) {
             Card(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2A0A0A))
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -97,7 +132,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 
         val data = homeData ?: return@Column
 
-        // Spotlight Carousel
         if (data.spotlightAnimes.isNotEmpty()) {
             SpotlightCarousel(
                 animes = data.spotlightAnimes,
@@ -106,32 +140,29 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             Spacer(Modifier.height(16.dp))
         }
 
-        // Trending
         if (data.trendingAnimes.isNotEmpty()) {
             AniwatchAnimeRow("Trending", data.trendingAnimes, onAnimeClick)
         }
 
-        // Currently Airing
         data.featuredAnimes?.topAiringAnimes?.let {
             if (it.isNotEmpty()) AniwatchAnimeRow("Currently Airing", it, onAnimeClick)
         }
 
-        // Most Popular
         data.featuredAnimes?.mostPopularAnimes?.let {
             if (it.isNotEmpty()) AniwatchAnimeRow("Most Popular", it, onAnimeClick)
         }
 
-        // Upcoming
         if (data.topUpcomingAnimes.isNotEmpty()) {
             AniwatchAnimeRow("Upcoming", data.topUpcomingAnimes, onAnimeClick)
         }
 
-        // Empty state
         if (data.spotlightAnimes.isEmpty() && data.trendingAnimes.isEmpty() &&
             data.topUpcomingAnimes.isEmpty() && errorMsg.isEmpty()
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -163,7 +194,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     }
 }
 
-// ====================== Spotlight Carousel ======================
 @Composable
 fun SpotlightCarousel(
     animes: List<SpotlightAnime>,
@@ -199,15 +229,21 @@ fun SpotlightCarousel(
                 )
 
                 Box(
-                    modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color(0xDD0A0A0F)),
-                            startY = 80f
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color(0xDD0A0A0F)),
+                                startY = 80f
+                            )
                         )
-                    )
                 )
 
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                ) {
                     Text(
                         text = anime.name,
                         color = Color.White,
@@ -226,8 +262,8 @@ fun SpotlightCarousel(
                     }
                 }
 
-               anime.episodes?.epsInt?.let { eps ->
-    if (eps > 0) {
+                anime.episodes?.epsInt?.let { eps ->
+                    if (eps > 0) {
                         Text(
                             text = "Ep $eps",
                             color = Color.White,
@@ -244,10 +280,11 @@ fun SpotlightCarousel(
             }
         }
 
-        // Page Indicators
         if (animes.size > 1) {
             Row(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 animes.indices.forEach { i ->
@@ -255,7 +292,9 @@ fun SpotlightCarousel(
                         modifier = Modifier
                             .size(if (i == pagerState.currentPage) 8.dp else 5.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(if (i == pagerState.currentPage) Purple40 else Color.Gray)
+                            .background(
+                                if (i == pagerState.currentPage) Purple40 else Color.Gray
+                            )
                     )
                 }
             }
@@ -263,7 +302,6 @@ fun SpotlightCarousel(
     }
 }
 
-// ====================== Reusable Anime Row ======================
 @Composable
 fun AniwatchAnimeRow(
     title: String,
@@ -312,8 +350,8 @@ fun AniwatchAnimeRow(
                     else -> ""
                 }
                 val eps = when (item) {
-                    is SpotlightAnime -> item.episodes?.eps
-                    is AnimeItem -> item.episodes?.eps
+                    is SpotlightAnime -> item.episodes?.epsInt
+                    is AnimeItem -> item.episodes?.epsInt
                     else -> null
                 }
 
@@ -329,7 +367,6 @@ fun AniwatchAnimeRow(
     }
 }
 
-// ====================== Anime Card ======================
 @Composable
 fun AniwatchAnimeCard(
     id: String,
