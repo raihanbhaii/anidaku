@@ -445,8 +445,8 @@ fun AnimeDetailScreen(
                             EpisodeItem(
                                 episode = ep,
                                 onClick = {
-                                    val playerUrl =
-                                        "https://megaplay.buzz/stream/s-2/${ep.episodeId}/$selectedCategory"
+                                    val epId = ep.episodeId.substringAfterLast("ep=")
+                                    val playerUrl = "https://megaplay.buzz/stream/s-2/$epId/$selectedCategory"
                                     onPlayEpisode(
                                         playerUrl,
                                         ep.name ?: "Episode ${ep.episodeNo}",
