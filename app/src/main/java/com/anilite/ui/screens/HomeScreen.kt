@@ -226,8 +226,8 @@ fun SpotlightCarousel(
                     }
                 }
 
-                anime.episodes?.eps?.let { eps ->
-                    if (eps > 0) {
+               anime.episodes?.epsInt?.let { eps ->
+    if (eps > 0) {
                         Text(
                             text = "Ep $eps",
                             color = Color.White,
