@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,15 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.vector.path
-import androidx.compose.ui.graphics.PathFillType
 import android.content.Intent
 import android.net.Uri
 import coil.compose.AsyncImage
@@ -33,55 +33,10 @@ import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 
-// ── Telegram SVG Icon ──────────────────────────────────────────────────────
-val TelegramIcon: ImageVector = ImageVector.Builder(
-    name = "Telegram",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f
-).apply {
-    path(
-        fillAlpha = 1f,
-        fill = androidx.compose.ui.graphics.SolidColor(Color.White),
-        pathFillType = PathFillType.NonZero
-    ) {
-        moveTo(11.944f, 0f)
-        arcTo(12f, 12f, 0f, false, false, 0f, 12f)
-        arcTo(12f, 12f, 0f, false, false, 12f, 24f)
-        arcTo(12f, 12f, 0f, false, false, 24f, 12f)
-        arcTo(12f, 12f, 0f, false, false, 11.944f, 0f)
-        close()
-        moveTo(18.306f, 7.307f)
-        lineTo(15.633f, 19.873f)
-        curveTo(15.633f, 19.873f, 15.27f, 20.78f, 14.277f, 20.344f)
-        lineTo(8.777f, 16.117f)
-        lineTo(6.756f, 15.168f)
-        lineTo(3.563f, 14.105f)
-        curveTo(3.563f, 14.105f, 3.076f, 13.934f, 3.029f, 13.498f)
-        curveTo(2.981f, 13.062f, 3.579f, 12.861f, 3.579f, 12.861f)
-        lineTo(17.291f, 7.517f)
-        curveTo(17.291f, 7.517f, 18.306f, 7.07f, 18.306f, 7.307f)
-        close()
-    }
-    path(
-        fillAlpha = 1f,
-        fill = androidx.compose.ui.graphics.SolidColor(Color(0xFF0A0A0F)),
-        pathFillType = PathFillType.NonZero
-    ) {
-        moveTo(8.556f, 19.71f)
-        curveTo(8.556f, 19.71f, 8.328f, 19.688f, 8.044f, 18.826f)
-        lineTo(6.756f, 14.48f)
-        lineTo(15.019f, 9.333f)
-        curveTo(15.019f, 9.333f, 15.507f, 9.043f, 15.488f, 9.333f)
-        curveTo(15.488f, 9.333f, 15.574f, 9.385f, 15.3f, 9.641f)
-        lineTo(8.864f, 15.445f)
-        lineTo(8.556f, 19.71f)
-        close()
-    }
-}.build()
-
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onAnimeClick: (String) -> Unit) {
     val context = LocalContext.current
@@ -92,14 +47,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     var isRefreshing by remember { mutableStateOf(false) }
     var loadTrigger by remember { mutableStateOf(0) }
 
-    // Pull to refresh state
-    val pullRefreshState = rememberPullToRefreshState()
-
-    LaunchedEffect(pullRefreshState.isRefreshing) {
-        if (pullRefreshState.isRefreshing) {
-            loadTrigger++
-        }
-    }
+    val pullToRefreshState = rememberPullToRefreshState()
 
     LaunchedEffect(loadTrigger) {
         if (loadTrigger == 0 && HomeCache.isCacheValid()) {
@@ -124,7 +72,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
         } finally {
             isLoading = false
             isRefreshing = false
-            pullRefreshState.endRefresh()
         }
     }
 
@@ -135,10 +82,11 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
         return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(pullRefreshState.nestedScrollConnection)
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { loadTrigger++ },
+        state = pullToRefreshState,
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
             modifier = Modifier
@@ -146,7 +94,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Title + Telegram button
+            // Title + Community button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -161,18 +109,20 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
 
-                // Telegram community button
                 IconButton(
                     onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/anidaku"))
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://t.me/anidaku")
+                        )
                         context.startActivity(intent)
                     }
                 ) {
                     Icon(
-                        imageVector = TelegramIcon,
+                        imageVector = Icons.Default.Groups,
                         contentDescription = "Community",
                         tint = Purple40,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
@@ -261,14 +211,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 
             Spacer(Modifier.height(80.dp))
         }
-
-        // Pull to refresh indicator
-        PullToRefreshContainer(
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = Color(0xFF1C1C28),
-            contentColor = Purple40
-        )
     }
 }
 
