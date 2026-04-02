@@ -134,6 +134,7 @@ fun AnidakuApp(
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
+                    // FIX: lambda now correctly declares all 3 parameters that AnimeDetailScreen passes
                     onPlayEpisode = { episodeId: String, episodeTitle: String, episodeNumber: Int ->
                         val fullTitle = "$episodeTitle - Episode $episodeNumber"
                         onPlayEpisode(episodeId, fullTitle)
