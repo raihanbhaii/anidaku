@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
@@ -28,16 +29,19 @@ import com.anilite.ui.theme.SurfaceVariant
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen() // ← must be before super.onCreate
         super.onCreate(savedInstanceState)
 
         setContent {
             AnidakuTheme {
                 AnidakuApp(
-                    onPlayEpisode = { episodeId: String, episodeTitle: String ->
+                    onPlayEpisode = { episodeId, category, episodeTitle, episodeNumber ->
                         startActivity(
                             Intent(this@MainActivity, PlayerActivity::class.java).apply {
                                 putExtra("episodeId", episodeId)
+                                putExtra("category", category)
                                 putExtra("episodeTitle", episodeTitle)
+                                putExtra("episodeNumber", episodeNumber)
                             }
                         )
                     }
@@ -49,7 +53,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AnidakuApp(
-    onPlayEpisode: (String, String) -> Unit
+    onPlayEpisode: (episodeId: String, category: String, episodeTitle: String, episodeNumber: Int) -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -134,9 +138,8 @@ fun AnidakuApp(
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
-                    onPlayEpisode = { episodeId: String, category: String, episodeTitle: String, episodeNumber: Int ->
-                        val fullTitle = "$episodeTitle - Episode $episodeNumber"
-                        onPlayEpisode(episodeId, fullTitle)
+                    onPlayEpisode = { episodeId, category, episodeTitle, episodeNumber ->
+                        onPlayEpisode(episodeId, category, episodeTitle, episodeNumber)
                     }
                 )
             }
