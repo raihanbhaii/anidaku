@@ -1,23 +1,36 @@
 package com.anilite.data
 
-object HomeCache {
+object AnimeDetailCache {
     private const val TTL = 10 * 60 * 1000L
 
-    var cachedHome: HomeResponse? = null
-    var lastFetchTime: Long = 0
-
-    fun isCacheValid(): Boolean {
-        return cachedHome != null &&
-            (System.currentTimeMillis() - lastFetchTime) < TTL
+    private data class CacheEntry(
+        val detail: AnimeDetailResponse,
+        val episodes: EpisodesResponse?,
+        val fetchTime: Long = System.currentTimeMillis()
+    ) {
+        fun isValid() = (System.currentTimeMillis() - fetchTime) < TTL
     }
 
-    fun save(data: HomeResponse) {
-        cachedHome = data
-        lastFetchTime = System.currentTimeMillis()
+    private val cache = mutableMapOf<String, CacheEntry>()
+
+    fun getDetail(animeId: String): AnimeDetailResponse? =
+        cache[animeId]?.takeIf { it.isValid() }?.detail
+
+    fun getEpisodes(animeId: String): EpisodesResponse? =
+        cache[animeId]?.takeIf { it.isValid() }?.episodes
+
+    fun isCacheValid(animeId: String): Boolean =
+        cache[animeId]?.isValid() == true
+
+    fun save(animeId: String, detail: AnimeDetailResponse, episodes: EpisodesResponse?) {
+        cache[animeId] = CacheEntry(detail, episodes)
     }
 
-    fun clear() {
-        cachedHome = null
-        lastFetchTime = 0
+    fun clear(animeId: String) {
+        cache.remove(animeId)
+    }
+
+    fun clearAll() {
+        cache.clear()
     }
 }
