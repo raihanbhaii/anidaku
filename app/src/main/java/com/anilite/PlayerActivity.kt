@@ -2,6 +2,7 @@ package com.anilite
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.CookieManager
@@ -27,17 +28,66 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.anilite.ui.theme.AnidakuTheme
 
 class PlayerActivity : ComponentActivity() {
+
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+
         val playerUrl = intent.getStringExtra("playerUrl") ?: ""
+
         setContent {
             AnidakuTheme {
                 PlayerScreen(
                     playerUrl = playerUrl,
-                    onBack = { finish() }
+                    onBack = { finish() },
+                    onShowCustomView = { view, callback ->
+                        customView = view
+                        customViewCallback = callback
+                        val decorView = window.decorView as ViewGroup
+                        decorView.addView(
+                            view,
+                            ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        )
+                        @Suppress("DEPRECATION")
+                        window.decorView.systemUiVisibility = (
+                            View.SYSTEM_UI_FLAG_FULLSCREEN or
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        )
+                    },
+                    onHideCustomView = {
+                        val decorView = window.decorView as ViewGroup
+                        customView?.let { decorView.removeView(it) }
+                        customView = null
+                        customViewCallback?.onCustomViewHidden()
+                        customViewCallback = null
+                        @Suppress("DEPRECATION")
+                        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                    }
                 )
             }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (customView != null) {
+            val decorView = window.decorView as ViewGroup
+            customView?.let { decorView.removeView(it) }
+            customView = null
+            customViewCallback?.onCustomViewHidden()
+            customViewCallback = null
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        } else {
+            super.onBackPressed()
         }
     }
 }
@@ -46,7 +96,9 @@ class PlayerActivity : ComponentActivity() {
 @Composable
 fun PlayerScreen(
     playerUrl: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onShowCustomView: (View, WebChromeClient.CustomViewCallback) -> Unit,
+    onHideCustomView: () -> Unit
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
 
@@ -58,20 +110,27 @@ fun PlayerScreen(
         }
     }
 
+    // The iframe HTML — baseURL must match megaplay.buzz so the embed referrer check passes
     val htmlContent = """
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { background: #000; width: 100%; height: 100vh; overflow: hidden; }
+                html, body {
+                    background: #000;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                }
                 iframe {
+                    position: absolute;
+                    top: 0; left: 0;
                     width: 100%;
                     height: 100%;
                     border: none;
-                    display: block;
                 }
             </style>
         </head>
@@ -81,7 +140,7 @@ fun PlayerScreen(
                 frameborder="0"
                 scrolling="no"
                 allowfullscreen
-                allow="autoplay; fullscreen; encrypted-media"
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             ></iframe>
         </body>
         </html>
@@ -111,26 +170,45 @@ fun PlayerScreen(
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         allowContentAccess = true
                         allowFileAccess = true
-                        cacheMode = WebSettings.LOAD_NO_CACHE
-                        userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                        cacheMode = WebSettings.LOAD_DEFAULT
+                        setSupportMultipleWindows(true)
+                        javaScriptCanOpenWindowsAutomatically = true
+                        // Desktop user agent so megaplay doesn't serve a broken mobile page
+                        userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                            "Chrome/122.0.0.0 Safari/537.36"
                     }
 
-                    // FIX: pass the WebView instance explicitly, not `this@apply` from CookieManager scope
                     val cookieManager = CookieManager.getInstance()
                     cookieManager.setAcceptCookie(true)
                     cookieManager.setAcceptThirdPartyCookies(this, true)
 
-                    webChromeClient = WebChromeClient()
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onShowCustomView(
+                            view: View?,
+                            callback: CustomViewCallback?
+                        ) {
+                            if (view != null && callback != null) {
+                                onShowCustomView(view, callback)
+                            }
+                        }
+
+                        override fun onHideCustomView() {
+                            onHideCustomView()
+                        }
+                    }
 
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): Boolean {
+                            // Allow all navigation inside the WebView
                             return false
                         }
                     }
 
+                    // KEY FIX: baseUrl = megaplay.buzz so the iframe embed referrer check passes
                     loadDataWithBaseURL(
                         "https://megaplay.buzz/",
                         htmlContent,
