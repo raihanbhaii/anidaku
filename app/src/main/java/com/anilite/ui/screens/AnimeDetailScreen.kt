@@ -42,8 +42,9 @@ fun AnimeDetailScreen(
     var errorMsg by remember { mutableStateOf("") }
     var inWatchlist by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
+    var loadTrigger by remember { mutableStateOf(0) }  // ✅ for retry
 
-    LaunchedEffect(animeId) {
+    LaunchedEffect(animeId, loadTrigger) {
         if (animeId.isBlank()) {
             errorMsg = "Invalid anime ID"
             isLoading = false
@@ -58,7 +59,7 @@ fun AnimeDetailScreen(
             episodesResponse = repository.getEpisodes(animeId)
             inWatchlist = WatchlistManager.isInWatchlist(context, animeId)
         } catch (e: Exception) {
-            errorMsg = "Failed to load anime: ${e.message ?: e::class.simpleName}"
+            errorMsg = "Failed to load: ${e.message ?: e::class.simpleName}"
             e.printStackTrace()
         } finally {
             isLoading = false
@@ -68,7 +69,11 @@ fun AnimeDetailScreen(
     // Loading State
     if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Purple40)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Purple40)
+                Spacer(Modifier.height(12.dp))
+                Text("Loading anime...", color = Color.Gray, fontSize = 13.sp)
+            }
         }
         return
     }
@@ -76,14 +81,32 @@ fun AnimeDetailScreen(
     // Error State
     if (errorMsg.isNotEmpty() || animeDetail?.info == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Text("😕", fontSize = 40.sp)
                 Text(
                     text = errorMsg.ifEmpty { "Failed to load anime" },
-                    color = Color.Red
+                    color = Color.Red,
+                    fontSize = 14.sp
                 )
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = { /* Add retry if needed */ }) {
-                    Text("Retry")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // ✅ Back button
+                    OutlinedButton(
+                        onClick = onBack,
+                        border = BorderStroke(1.dp, Color.Gray)
+                    ) {
+                        Text("Go Back", color = Color.Gray)
+                    }
+                    // ✅ Working retry button
+                    Button(
+                        onClick = { loadTrigger++ },
+                        colors = ButtonDefaults.buttonColors(containerColor = Purple40)
+                    ) {
+                        Text("Retry")
+                    }
                 }
             }
         }
@@ -108,16 +131,21 @@ fun AnimeDetailScreen(
                     modifier = Modifier.fillMaxSize()
                 )
                 Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)),
-                            startY = 120f
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0x660A0A0F), Color(0xFF0A0A0F)),
+                                startY = 120f
+                            )
                         )
-                    )
                 )
 
                 // Back Button
-                IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.padding(8.dp)
+                ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
 
@@ -137,13 +165,32 @@ fun AnimeDetailScreen(
                         }
                         inWatchlist = !inWatchlist
                     },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
                 ) {
                     Icon(
                         if (inWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         null,
                         tint = if (inWatchlist) Purple40 else Color.White
                     )
+                }
+
+                // Episode count badge on banner
+                info.episodes?.epsInt?.let { eps ->
+                    if (eps > 0) {
+                        Text(
+                            text = "Ep $eps",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(16.dp)
+                                .background(Purple40, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -165,9 +212,10 @@ fun AnimeDetailScreen(
                 ) {
                     info.quality.takeIf { it.isNotBlank() }?.let { StatChip(it) }
                     info.duration.takeIf { it.isNotBlank() }?.let { StatChip(it) }
-                    info.category.takeIf { it.isNotBlank() }?.let { 
-                        StatChip(it.replace("-", " ").uppercase()) 
+                    info.category.takeIf { it.isNotBlank() }?.let {
+                        StatChip(it.replace("-", " ").uppercase())
                     }
+                    info.rating.takeIf { it.isNotBlank() }?.let { StatChip(it) }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -176,7 +224,9 @@ fun AnimeDetailScreen(
                 if (info.description.isNotBlank()) {
                     var expanded by remember { mutableStateOf(false) }
                     Text(
-                        text = info.description.replace("<br>", "\n").replace("<[^>]*>".toRegex(), ""),
+                        text = info.description
+                            .replace("<br>", "\n")
+                            .replace("<[^>]*>".toRegex(), ""),
                         color = Color(0xFFB0B0C0),
                         fontSize = 13.sp,
                         lineHeight = 20.sp,
@@ -233,7 +283,8 @@ fun AnimeDetailScreen(
                         EpisodeItem(
                             episode = ep,
                             onClick = {
-                                val playerUrl = "https://megaplay.buzz/stream/s-2/${ep.episodeId}/sub"
+                                val playerUrl =
+                                    "https://megaplay.buzz/stream/s-2/${ep.episodeId}/sub"
                                 onPlayEpisode(
                                     playerUrl,
                                     ep.name ?: "Episode ${ep.episodeNo}",
@@ -244,28 +295,51 @@ fun AnimeDetailScreen(
                     }
                 } else {
                     item {
-                        Text(
-                            "No episodes available yet",
-                            color = Color.Gray,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "No episodes available yet",
+                                color = Color.Gray,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
+
             1 -> {
-                item {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "More Information",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "More details (studios, genres, etc.) will be added soon...",
-                            color = Color.Gray
-                        )
+                // More Info Tab
+                animeDetail?.moreInfo?.let { more ->
+                    item {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "More Information",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            more.japanese?.let { InfoRow("Japanese", it) }
+                            more.aired?.let { InfoRow("Aired", it) }
+                            more.premiered?.let { InfoRow("Premiered", it) }
+                            more.status?.let { InfoRow("Status", it) }
+                            more.studios?.let { InfoRow("Studios", it) }
+                            more.malScore?.let { InfoRow("MAL Score", it) }
+                            more.duration?.let { InfoRow("Duration", it) }
+                            if (more.genres.isNotEmpty()) {
+                                InfoRow("Genres", more.genres.joinToString(", "))
+                            }
+                            if (more.producers.isNotEmpty()) {
+                                InfoRow("Producers", more.producers.joinToString(", "))
+                            }
+                        }
                     }
                 }
             }
@@ -275,7 +349,30 @@ fun AnimeDetailScreen(
     }
 }
 
-// Episode Item - FIXED
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(0.4f)
+        )
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(0.6f)
+        )
+    }
+    HorizontalDivider(color = Color(0xFF1C1C28), thickness = 0.5.dp)
+}
+
 @Composable
 fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
     Row(
