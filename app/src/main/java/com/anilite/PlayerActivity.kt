@@ -49,6 +49,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -136,12 +137,24 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
             val referer = json.optString("refer", "https://megacloud.club/")
             val intro   = json.optJSONObject("skip")
                 ?.optJSONObject("intro")?.optLong("end", 0L) ?: 0L
+
+            // FIX: Accept both "captions" and "subtitles" kind values, and
+            // don't rely solely on the "default" boolean — also fall back to
+            // the first caption/subtitle track if none is marked default.
             val subtitleUrl = json.optJSONArray("tracks")?.let { tracks ->
-                (0 until tracks.length()).map { tracks.getJSONObject(it) }
-                    .firstOrNull {
-                        it.optBoolean("default") && it.optString("kind") == "captions"
-                    }?.optString("file")
+                val list = (0 until tracks.length()).map { tracks.getJSONObject(it) }
+                val defaultTrack = list.firstOrNull {
+                    (it.optString("kind") == "captions" || it.optString("kind") == "subtitles")
+                        && it.optBoolean("default")
+                }
+                val fallbackTrack = list.firstOrNull {
+                    it.optString("kind") == "captions" || it.optString("kind") == "subtitles"
+                }
+                (defaultTrack ?: fallbackTrack)?.optString("file")
+                    ?.takeIf { it.isNotBlank() }
             }
+
+            Log.d(TAG, "Subtitle URL: $subtitleUrl")
             return StreamData(m3u8, referer, intro * 1000L, subtitleUrl)
         } catch (e: Exception) {
             Log.w(TAG, "Server $server failed: ${e.message}")
@@ -195,7 +208,6 @@ fun SettingsPanel(
         Icons.Default.ZoomOutMap
     )
 
-    // Scrim — tapping outside dismisses
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -206,14 +218,12 @@ fun SettingsPanel(
             ) { onDismiss() }
     )
 
-    // Panel slides in from the right edge
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
         Column(
             modifier = Modifier
                 .width(290.dp)
                 .fillMaxHeight()
                 .background(panelBg)
-                // Consume clicks so they don't fall through to the scrim
                 .clickable(
                     indication        = null,
                     interactionSource = remember { MutableInteractionSource() }
@@ -221,7 +231,6 @@ fun SettingsPanel(
                 .padding(top = 16.dp, bottom = 32.dp)
         ) {
 
-            // Header row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -251,9 +260,7 @@ fun SettingsPanel(
             HorizontalDivider(color = divider, thickness = 0.5.dp)
             Spacer(Modifier.height(16.dp))
 
-            // ────────────────────────────────────────────────────────────
             // SUBTITLES
-            // ────────────────────────────────────────────────────────────
             SectionLabel("Subtitles", labelColor)
             Spacer(Modifier.height(8.dp))
 
@@ -310,13 +317,10 @@ fun SettingsPanel(
             HorizontalDivider(color = divider, thickness = 0.5.dp)
             Spacer(Modifier.height(16.dp))
 
-            // ────────────────────────────────────────────────────────────
             // PLAYBACK SPEED
-            // ────────────────────────────────────────────────────────────
             SectionLabel("Playback Speed", labelColor)
             Spacer(Modifier.height(8.dp))
 
-            // 4 chips per row × 2 rows
             speedOptions.chunked(4).forEach { row ->
                 Row(
                     modifier              = Modifier
@@ -350,9 +354,7 @@ fun SettingsPanel(
             HorizontalDivider(color = divider, thickness = 0.5.dp)
             Spacer(Modifier.height(16.dp))
 
-            // ────────────────────────────────────────────────────────────
             // ASPECT RATIO
-            // ────────────────────────────────────────────────────────────
             SectionLabel("Aspect Ratio", labelColor)
             Spacer(Modifier.height(8.dp))
 
@@ -420,7 +422,6 @@ fun PlayerScreen(
     val context      = LocalContext.current
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    // ── State ─────────────────────────────────────────────────────────────
     var streamData        by remember { mutableStateOf<StreamData?>(null) }
     var isLoading         by remember { mutableStateOf(true) }
     var isBuffering       by remember { mutableStateOf(false) }
@@ -450,6 +451,10 @@ fun PlayerScreen(
     val exoPlayer     = remember { mutableStateOf<ExoPlayer?>(null) }
     val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
 
+    // FIX: Track whether tracks have been loaded so we can re-apply subtitle
+    // state if the user toggles while tracks are already ready.
+    val tracksReady = remember { mutableStateOf(false) }
+
     val aspectModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
         AspectRatioFrameLayout.RESIZE_MODE_FILL,
@@ -468,7 +473,7 @@ fun PlayerScreen(
         }
     }
 
-    // ── Auto-hide controls (paused while settings panel is open) ──────────
+    // ── Auto-hide controls ────────────────────────────────────────────────
     LaunchedEffect(showControls, isLocked, showSettings) {
         if (showControls && !isLocked && !showSettings) {
             delay(4000)
@@ -492,6 +497,8 @@ fun PlayerScreen(
     // ── Build ExoPlayer ───────────────────────────────────────────────────
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
+        tracksReady.value = false
+
         val factory = DefaultHttpDataSource.Factory().apply {
             setDefaultRequestProperties(mapOf(
                 "Referer"    to data.referer,
@@ -521,8 +528,18 @@ fun PlayerScreen(
             setMediaSource(mediaSource)
             prepare()
             playWhenReady = true
-            applySubtitleState(this, subtitlesEnabled)
+
+            // FIX: Do NOT call applySubtitleState here — tracks are not loaded yet.
+            // Instead, apply it inside onTracksChanged once tracks are actually available.
             addListener(object : Player.Listener {
+
+                // FIX: Apply subtitle state as soon as tracks are loaded.
+                // This is the correct place — calling it before this point is a no-op.
+                override fun onTracksChanged(tracks: Tracks) {
+                    tracksReady.value = true
+                    applySubtitleState(this@apply, subtitlesEnabled)
+                }
+
                 override fun onPlayerError(error: PlaybackException) {
                     errorMsg = "Playback error: ${error.message}"
                 }
@@ -537,9 +554,14 @@ fun PlayerScreen(
         exoPlayer.value = player
     }
 
-    // ── Apply subtitle state whenever toggled ─────────────────────────────
-    LaunchedEffect(subtitlesEnabled) {
-        exoPlayer.value?.let { applySubtitleState(it, subtitlesEnabled) }
+    // ── Apply subtitle toggle after tracks are ready ───────────────────────
+    // FIX: The original code called applySubtitleState in LaunchedEffect(subtitlesEnabled)
+    // which could fire before tracks were loaded (making it a no-op).
+    // Now we gate it on tracksReady so the toggle always works correctly.
+    LaunchedEffect(subtitlesEnabled, tracksReady.value) {
+        if (tracksReady.value) {
+            exoPlayer.value?.let { applySubtitleState(it, subtitlesEnabled) }
+        }
     }
 
     // ── Position + skip intro polling ─────────────────────────────────────
@@ -819,7 +841,6 @@ fun PlayerScreen(
                             )
                         }
 
-                        // Lock
                         IconButton(onClick = { isLocked = true; showControls = false }) {
                             Icon(
                                 Icons.Default.LockOpen, null,
@@ -829,11 +850,10 @@ fun PlayerScreen(
                         }
                         Spacer(Modifier.width(4.dp))
 
-                        // ── Settings button ───────────────────────────────
                         IconButton(
                             onClick  = {
-                                showSettings  = true
-                                showControls  = true  // keep controls visible while panel open
+                                showSettings = true
+                                showControls = true
                             },
                             modifier = Modifier
                                 .clip(CircleShape)
@@ -940,7 +960,7 @@ fun PlayerScreen(
                 }
             }
 
-            // ── Settings panel (slides in from right) ─────────────────────
+            // ── Settings panel ────────────────────────────────────────────
             AnimatedVisibility(
                 visible  = showSettings,
                 enter    = slideInHorizontally { it } + fadeIn(tween(180)),
