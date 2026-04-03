@@ -29,9 +29,29 @@ import com.anilite.ui.theme.SurfaceVariant
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen() // ← must be before super.onCreate
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
+        // Check for update in background before showing UI
+        Thread {
+            val update = UpdateChecker.check(this)
+            runOnUiThread {
+                if (update.hasUpdate) {
+                    startActivity(
+                        Intent(this, UpdateActivity::class.java).apply {
+                            putExtra("apk_url", update.apkUrl)
+                            putExtra("latest_version", update.latestVersion)
+                        }
+                    )
+                    finish()
+                } else {
+                    showApp()
+                }
+            }
+        }.start()
+    }
+
+    private fun showApp() {
         setContent {
             AnidakuTheme {
                 AnidakuApp(
@@ -107,34 +127,21 @@ fun AnidakuApp(
                 .fillMaxSize()
         ) {
             composable("home") {
-                HomeScreen(
-                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
-                )
+                HomeScreen(onAnimeClick = { animeId -> navController.navigate("detail/$animeId") })
             }
-
             composable("search") {
-                SearchScreen(
-                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
-                )
+                SearchScreen(onAnimeClick = { animeId -> navController.navigate("detail/$animeId") })
             }
-
             composable("watchlist") {
-                WatchlistScreen(
-                    onAnimeClick = { animeId -> navController.navigate("detail/$animeId") }
-                )
+                WatchlistScreen(onAnimeClick = { animeId -> navController.navigate("detail/$animeId") })
             }
-
             composable(
                 route = "detail/{animeId}",
-                arguments = listOf(
-                    navArgument("animeId") {
-                        type = NavType.StringType
-                        defaultValue = "-1"
-                    }
-                )
+                arguments = listOf(navArgument("animeId") {
+                    type = NavType.StringType; defaultValue = "-1"
+                })
             ) { backStackEntry ->
                 val animeId = backStackEntry.arguments?.getString("animeId") ?: "-1"
-
                 AnimeDetailScreen(
                     animeId = animeId,
                     onBack = { navController.popBackStack() },
