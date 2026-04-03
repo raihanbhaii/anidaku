@@ -1,8 +1,12 @@
 package com.anilite
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -17,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
@@ -43,7 +48,8 @@ class UpdateActivity : ComponentActivity() {
                     latestVersion = latestVersion,
                     onUpdate = { onProgress, onDone, onError ->
                         downloadApk(apkUrl, onProgress, onDone, onError)
-                    }
+                    },
+                    onInstall = { file -> installApk(file) }
                 )
             }
         }
@@ -78,21 +84,52 @@ class UpdateActivity : ComponentActivity() {
                         withContext(Dispatchers.Main) { onProgress(progress) }
                     }
                 }
-                output.flush(); output.close(); input.close()
+                output.flush()
+                output.close()
+                input.close()
                 withContext(Dispatchers.Main) { onDone(apkFile) }
             } catch (e: Exception) {
+                e.printStackTrace()
                 withContext(Dispatchers.Main) { onError() }
             }
         }
     }
 
     fun installApk(file: File) {
-        val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
-        startActivity(Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        })
+        // Guard: file must exist
+        if (!file.exists()) {
+            Toast.makeText(this, "APK file missing, please download again.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Android 8+ requires user to explicitly allow installs from unknown sources
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                Toast.makeText(
+                    this,
+                    "Please enable 'Install unknown apps' for Anidaku, then tap Install again.",
+                    Toast.LENGTH_LONG
+                ).show()
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                )
+                return
+            }
+        }
+
+        try {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
+            startActivity(Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Install failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }
 
@@ -103,17 +140,15 @@ fun UpdateScreen(
         onProgress: (Int) -> Unit,
         onDone: (File) -> Unit,
         onError: () -> Unit
-    ) -> Unit
+    ) -> Unit,
+    onInstall: (File) -> Unit  // ← Pass install as a callback, avoid casting context
 ) {
-    val activity = androidx.compose.ui.platform.LocalContext.current as UpdateActivity
-
     var progress by remember { mutableStateOf(0) }
     var isDownloading by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
     var isError by remember { mutableStateOf(false) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
 
-    // Pulse animation for the icon
     val pulse = rememberInfiniteTransition(label = "pulse")
     val scale by pulse.animateFloat(
         initialValue = 1f,
@@ -142,8 +177,6 @@ fun UpdateScreen(
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            // Icon circle
             Box(
                 modifier = Modifier
                     .size(100.dp)
@@ -203,7 +236,6 @@ fun UpdateScreen(
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // Progress card
             if (isDownloading || isDone) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -248,11 +280,10 @@ fun UpdateScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Main button
             Button(
                 onClick = {
                     when {
-                        isDone -> downloadedFile?.let { activity.installApk(it) }
+                        isDone -> downloadedFile?.let { onInstall(it) }  // ← use callback
                         isError -> {
                             isError = false
                             isDownloading = true
