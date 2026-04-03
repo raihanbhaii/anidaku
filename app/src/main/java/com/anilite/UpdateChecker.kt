@@ -26,10 +26,11 @@ object UpdateChecker {
             connection.readTimeout = 6000
 
             val json = JSONObject(connection.inputStream.bufferedReader().readText())
-            val latestVersion = json.getString("tag_name").trimStart('v') // e.g. "1.0.2"
+            val latestVersion = json.getString("tag_name").trimStart('v')
 
             val currentVersion = context.packageManager
-                .getPackageInfo(context.packageName, 0).versionName.trimStart('v')
+                .getPackageInfo(context.packageName, 0).versionName
+                ?.trimStart('v') ?: "0"
 
             UpdateInfo(
                 hasUpdate = latestVersion != currentVersion,
