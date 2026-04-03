@@ -308,7 +308,7 @@ fun UpdateScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Anidaku • Free & Open Source",
+                text = "Anidaku • Best Anime App",
                 fontSize = 11.sp,
                 color = Color(0xFF555555)
             )
