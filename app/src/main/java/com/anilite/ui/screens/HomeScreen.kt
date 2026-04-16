@@ -256,6 +256,14 @@ fun SpotlightCarousel(
                     .fillMaxSize()
                     .clickable { onAnimeClick(anime.id) }
             ) {
+                // Background fallback (visible while loading or if image fails)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+
+                // Main image
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(anime.img)
@@ -263,15 +271,7 @@ fun SpotlightCarousel(
                         .build(),
                     contentDescription = anime.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    onLoading = { /* optional shimmer placeholder */ },
-                    onError = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                        )
-                    }
+                    modifier = Modifier.fillMaxSize()
                 )
 
                 // Gradient overlay for better text readability
@@ -436,6 +436,13 @@ fun AniwatchAnimeCard(
                 .clip(RoundedCornerShape(10.dp))
                 .shadow(4.dp, RoundedCornerShape(10.dp))
         ) {
+            // Background fallback
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(img)
