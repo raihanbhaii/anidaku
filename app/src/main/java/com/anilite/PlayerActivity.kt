@@ -121,15 +121,21 @@ class PlayerActivity : ComponentActivity() {
     }
 }
 
-// Stream fetch with new API
+// Stream fetch with corrected API
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
-    val cleanId = episodeId.substringAfterLast("ep=").takeIf { it.isNotBlank() } ?: episodeId
+    // Extract just the numeric episode ID
+    val cleanId = when {
+        episodeId.contains("?ep=") -> episodeId.substringAfterLast("ep=")
+        episodeId.contains("?") -> episodeId.substringBefore("?")
+        else -> episodeId
+    }
     
     val servers = listOf("HD-1", "HD-2", "HD-3")
     
     for (server in servers) {
         try {
             val url = "https://byanime-iota.vercel.app/api/stream?id=$cleanId&server=$server&type=$category"
+            Log.d("PlayerActivity", "Fetching: $url")
             
             val response = withContext(Dispatchers.IO) {
                 URL(url).openConnection().apply {
@@ -147,22 +153,27 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 val m3u8 = firstLink.optString("link")
                 
                 if (m3u8.isNotBlank()) {
+                    // Parse subtitles
                     val tracksArray = json.optJSONArray("tracks")
                     val subtitles = mutableListOf<SubtitleTrack>()
                     
                     if (tracksArray != null) {
                         for (i in 0 until tracksArray.length()) {
                             val track = tracksArray.getJSONObject(i)
-                            subtitles.add(
-                                SubtitleTrack(
-                                    url = track.optString("file"),
-                                    label = track.optString("label", "Unknown"),
-                                    kind = track.optString("kind", "subtitles")
+                            val kind = track.optString("kind", "")
+                            if (kind == "subtitles" || kind == "captions") {
+                                subtitles.add(
+                                    SubtitleTrack(
+                                        url = track.optString("file"),
+                                        label = track.optString("label", "English"),
+                                        kind = kind
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                     
+                    // Parse intro
                     val introJson = json.optJSONObject("intro")
                     val intro = if (introJson != null) {
                         SkipSegment(
@@ -171,6 +182,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                         )
                     } else null
                     
+                    // Parse outro
                     val outroJson = json.optJSONObject("outro")
                     val outro = if (outroJson != null) {
                         SkipSegment(
@@ -179,6 +191,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                         )
                     } else null
                     
+                    Log.d("PlayerActivity", "Success with server $server")
                     return StreamData(m3u8, subtitles, intro, outro)
                 }
             }
@@ -187,7 +200,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         }
     }
     
-    throw Exception("All servers failed")
+    throw Exception("All servers failed to load stream")
 }
 
 // Helpers
@@ -419,7 +432,7 @@ fun PlayerScreen(
         try {
             streamData = fetchStreamData(episodeId, category)
         } catch (e: Exception) {
-            errorMsg = "Failed to load stream. Please try again."
+            errorMsg = "Failed to load stream: ${e.message}"
         } finally {
             isLoading = false
         }
@@ -456,8 +469,7 @@ fun PlayerScreen(
 
         val factory = DefaultHttpDataSource.Factory().apply {
             setDefaultRequestProperties(mapOf(
-                "User-Agent" to "Mozilla/5.0",
-                "Origin" to "https://byanime-iota.vercel.app"
+                "User-Agent" to "Mozilla/5.0"
             ))
         }
 
@@ -574,7 +586,8 @@ fun PlayerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Error", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.ErrorOutline, null, tint = Color.Red, modifier = Modifier.size(48.dp))
+                Text("Stream Error", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Text(errorMsg, color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center)
                 Button(
                     onClick = onBack,
@@ -734,7 +747,7 @@ fun PlayerScreen(
                         Spacer(Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(episodeTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                            Text("Episode $episodeNumber", color = Color(0xFFAAAAAA), fontSize = 11.sp)
+                            Text("Episode $episodeNumber - ${category.uppercase()}", color = Color(0xFFAAAAAA), fontSize = 11.sp)
                         }
                         
                         IconButton(onClick = { isLocked = true; showControls = false }, modifier = Modifier.size(40.dp)) {
@@ -778,14 +791,13 @@ fun PlayerScreen(
                         PlayerIconButton(Icons.Default.Forward10, size = 44.dp) { seekForward() }
                     }
 
-                    // Bottom bar - Simple Slider
+                    // Bottom bar
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
-                        // Standard Slider (no experimental APIs)
                         Slider(
                             value = currentPosition.toFloat() / totalDuration.toFloat(),
                             onValueChange = { fraction ->
@@ -799,7 +811,6 @@ fun PlayerScreen(
                             )
                         )
                         
-                        // Time labels
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
