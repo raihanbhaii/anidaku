@@ -208,6 +208,7 @@ fun applySubtitleState(player: ExoPlayer, enabled: Boolean) {
 }
 
 // Settings Panel
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPanel(
     hasSubtitles: Boolean,
@@ -364,7 +365,7 @@ fun SettingsPanel(
 }
 
 // Main Player Screen
-@OptIn(UnstableApi::class)
+@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     episodeId: String,
@@ -795,10 +796,7 @@ fun PlayerScreen(
                             colors = SliderDefaults.colors(
                                 thumbColor = Color(0xFF9B59F5),
                                 activeTrackColor = Color(0xFF9B59F5),
-                                inactiveTrackColor = Color(0x33FFFFFF),
-                                activeTickColor = Color.Transparent,
-                                inactiveTickColor = Color.Transparent,
-                                disabledThumbColor = Color.Transparent
+                                inactiveTrackColor = Color(0x33FFFFFF)
                             ),
                             thumb = {
                                 Box(
