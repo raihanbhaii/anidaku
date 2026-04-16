@@ -208,7 +208,6 @@ fun applySubtitleState(player: ExoPlayer, enabled: Boolean) {
 }
 
 // Settings Panel
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPanel(
     hasSubtitles: Boolean,
@@ -365,7 +364,7 @@ fun SettingsPanel(
 }
 
 // Main Player Screen
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     episodeId: String,
@@ -779,49 +778,25 @@ fun PlayerScreen(
                         PlayerIconButton(Icons.Default.Forward10, size = 44.dp) { seekForward() }
                     }
 
-                    // Bottom bar - YouTube style thin progress
+                    // Bottom bar - Simple Slider
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
-                        // Thin progress slider
+                        // Standard Slider (no experimental APIs)
                         Slider(
                             value = currentPosition.toFloat() / totalDuration.toFloat(),
                             onValueChange = { fraction ->
                                 exoPlayer.value?.seekTo((fraction * totalDuration).toLong())
                             },
-                            modifier = Modifier.fillMaxWidth().height(20.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             colors = SliderDefaults.colors(
                                 thumbColor = Color(0xFF9B59F5),
                                 activeTrackColor = Color(0xFF9B59F5),
                                 inactiveTrackColor = Color(0x33FFFFFF)
-                            ),
-                            thumb = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF9B59F5))
-                                )
-                            },
-                            track = { sliderState ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(Color(0x33FFFFFF))
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(fraction = sliderState.value)
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(Color(0xFF9B59F5))
-                                )
-                            }
+                            )
                         )
                         
                         // Time labels
