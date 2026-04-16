@@ -17,9 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
@@ -94,19 +95,20 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Title + Community button
+            // Header with title + community button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Anidaku",
                     color = Purple40,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.5).sp
                 )
 
                 IconButton(
@@ -116,13 +118,14 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                             Uri.parse("https://t.me/anidaku")
                         )
                         context.startActivity(intent)
-                    }
+                    },
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Groups,
                         contentDescription = "Community",
                         tint = Purple40,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
             }
@@ -131,24 +134,26 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A0A0A))
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "Error loading anime:",
-                            color = Color.Red,
+                            "Failed to load anime",
+                            color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 15.sp
                         )
                         Spacer(Modifier.height(4.dp))
-                        Text(errorMsg, color = Color(0xFFFF8080), fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
+                        Text(errorMsg, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 13.sp)
+                        Spacer(Modifier.height(12.dp))
                         Button(
                             onClick = { loadTrigger++ },
-                            colors = ButtonDefaults.buttonColors(containerColor = Purple40)
+                            colors = ButtonDefaults.buttonColors(containerColor = Purple40),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Retry")
+                            Text("Retry", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -162,11 +167,11 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                     animes = data.spotlightAnimes,
                     onAnimeClick = onAnimeClick
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
             }
 
             if (data.trendingAnimes.isNotEmpty()) {
-                AniwatchAnimeRow("Trending", data.trendingAnimes, onAnimeClick)
+                AniwatchAnimeRow("Trending Now", data.trendingAnimes, onAnimeClick)
             }
 
             data.featuredAnimes?.topAiringAnimes?.let {
@@ -187,7 +192,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(48.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -196,13 +201,13 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                     ) {
                         Text(
                             "No anime available",
-                            color = Color.Gray,
-                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
                             "Pull down to refresh",
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                             fontSize = 14.sp
                         )
                     }
@@ -224,15 +229,25 @@ fun SpotlightCarousel(
     val pagerState = rememberPagerState(pageCount = { animes.size })
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(4000)
-            val next = (pagerState.currentPage + 1) % animes.size
-            scope.launch { pagerState.animateScrollToPage(next) }
+    // Auto-scroll every 4 seconds, but stop when user interacts
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.isScrollInProgress }.collect { isScrolling ->
+            if (!isScrolling) {
+                delay(4000)
+                val next = (pagerState.currentPage + 1) % animes.size
+                scope.launch { pagerState.animateScrollToPage(next) }
+            }
         }
     }
 
-    Box(modifier = Modifier.fillMaxWidth().height(220.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(240.dp)
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .shadow(8.dp, RoundedCornerShape(16.dp), clip = false)
+    ) {
         HorizontalPager(state = pagerState) { page ->
             val anime = animes[page]
 
@@ -242,23 +257,59 @@ fun SpotlightCarousel(
                     .clickable { onAnimeClick(anime.id) }
             ) {
                 AsyncImage(
-                    model = anime.img,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(anime.img)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = anime.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onLoading = { /* optional shimmer placeholder */ },
+                    onError = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                    }
                 )
 
+                // Gradient overlay for better text readability
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0xDD0A0A0F)),
-                                startY = 80f
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.0f),
+                                    Color.Black.copy(alpha = 0.7f)
+                                ),
+                                startY = 100f
                             )
                         )
                 )
 
+                // Episode badge (top-left)
+                anime.episodes?.epsInt?.takeIf { it > 0 }?.let { eps ->
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Purple40,
+                        shadowElevation = 4.dp
+                    ) {
+                        Text(
+                            text = "Ep $eps",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                // Title and info (bottom)
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -267,53 +318,45 @@ fun SpotlightCarousel(
                     Text(
                         text = anime.name,
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.shadow(2.dp)
                     )
                     val info = listOfNotNull(anime.category, anime.duration, anime.quality)
                     if (info.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = info.joinToString(" • "),
-                            color = Color(0xFFB0B0C0),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-
-                anime.episodes?.epsInt?.let { eps ->
-                    if (eps > 0) {
-                        Text(
-                            text = "Ep $eps",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.9f),
                             fontSize = 13.sp,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(12.dp)
-                                .background(Purple40, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.shadow(2.dp)
                         )
                     }
                 }
             }
         }
 
+        // Page indicators (dots)
         if (animes.size > 1) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                animes.indices.forEach { i ->
+                repeat(animes.size) { index ->
                     Box(
                         modifier = Modifier
-                            .size(if (i == pagerState.currentPage) 8.dp else 5.dp)
+                            .size(if (index == pagerState.currentPage) 10.dp else 6.dp)
                             .clip(RoundedCornerShape(50))
                             .background(
-                                if (i == pagerState.currentPage) Purple40 else Color.Gray
+                                if (index == pagerState.currentPage)
+                                    Purple40
+                                else
+                                    Color.White.copy(alpha = 0.5f)
                             )
                     )
                 }
@@ -330,57 +373,43 @@ fun AniwatchAnimeRow(
 ) {
     if (animes.isEmpty()) return
 
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
         Text(
             text = title,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
 
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(animes, key = { item ->
-                when (item) {
-                    is SpotlightAnime -> item.id
-                    is BasicAnime -> item.id
-                    is AnimeItem -> item.id
-                    else -> System.currentTimeMillis().toString()
+            items(
+                items = animes,
+                key = { item ->
+                    when (item) {
+                        is SpotlightAnime -> "spotlight_${item.id}"
+                        is BasicAnime -> "basic_${item.id}"
+                        is AnimeItem -> "anime_${item.id}"
+                        else -> "unknown_${System.currentTimeMillis()}"
+                    }
                 }
-            }) { item ->
-                val id = when (item) {
-                    is SpotlightAnime -> item.id
-                    is BasicAnime -> item.id
-                    is AnimeItem -> item.id
-                    else -> ""
-                }
-                val name = when (item) {
-                    is SpotlightAnime -> item.name
-                    is BasicAnime -> item.name
-                    is AnimeItem -> item.name
-                    else -> ""
-                }
-                val img = when (item) {
-                    is SpotlightAnime -> item.img
-                    is BasicAnime -> item.img
-                    is AnimeItem -> item.img
-                    else -> ""
-                }
-                val eps = when (item) {
-                    is SpotlightAnime -> item.episodes?.epsInt
-                    is AnimeItem -> item.episodes?.epsInt
-                    else -> null
+            ) { item ->
+                val (id, name, img, eps) = when (item) {
+                    is SpotlightAnime -> listOf(item.id, item.name, item.img, item.episodes?.epsInt)
+                    is BasicAnime -> listOf(item.id, item.name, item.img, null)
+                    is AnimeItem -> listOf(item.id, item.name, item.img, item.episodes?.epsInt)
+                    else -> listOf("", "", "", null)
                 }
 
                 AniwatchAnimeCard(
-                    id = id,
-                    name = name,
-                    img = img,
-                    episodeCount = eps,
-                    onClick = { onAnimeClick(id) }
+                    id = id.toString(),
+                    name = name.toString(),
+                    img = img.toString(),
+                    episodeCount = eps as? Int,
+                    onClick = { onAnimeClick(id.toString()) }
                 )
             }
         }
@@ -397,37 +426,47 @@ fun AniwatchAnimeCard(
 ) {
     Column(
         modifier = Modifier
-            .width(110.dp)
+            .width(120.dp)
             .clickable(onClick = onClick)
     ) {
-        AsyncImage(
-            model = img,
-            contentDescription = name,
-            contentScale = ContentScale.Crop,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(155.dp)
-                .clip(RoundedCornerShape(8.dp))
-        )
+                .height(170.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .shadow(4.dp, RoundedCornerShape(10.dp))
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(img)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
 
         Text(
             text = name,
-            color = Color.White,
-            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 16.sp
         )
 
-        episodeCount?.let { eps ->
-            if (eps > 0) {
-                Text(
-                    text = "Ep $eps",
-                    color = Purple40,
-                    fontSize = 10.sp
-                )
-            }
+        episodeCount?.takeIf { it > 0 }?.let { eps ->
+            Text(
+                text = "$eps eps",
+                color = Purple40,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
