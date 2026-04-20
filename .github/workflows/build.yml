@@ -7,6 +7,10 @@ on:
     tags:
       - 'v*'
 
+# Added permissions to allow creating releases and uploading assets
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build APK
