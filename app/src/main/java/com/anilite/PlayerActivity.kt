@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,10 +26,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -37,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,7 +83,7 @@ data class SubtitleTrack(
     val url: String,
     val label: String,
     val kind: String,
-    val language: String = "en" // Added language field
+    val language: String = "en"
 )
 
 data class SkipSegment(
@@ -91,7 +95,6 @@ data class SkipSegment(
 class PlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -100,19 +103,19 @@ class PlayerActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
-        val episodeId    = intent.getStringExtra("episodeId")    ?: ""
-        val category     = intent.getStringExtra("category")     ?: "sub"
+        val episodeId = intent.getStringExtra("episodeId") ?: ""
+        val category = intent.getStringExtra("category") ?: "sub"
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
-        val episodeNumber = intent.getIntExtra("episodeNumber",   0)
+        val episodeNumber = intent.getIntExtra("episodeNumber", 0)
 
         setContent {
             AnidakuTheme {
                 PlayerScreen(
-                    episodeId     = episodeId,
-                    category      = category,
-                    episodeTitle  = episodeTitle,
+                    episodeId = episodeId,
+                    category = category,
+                    episodeTitle = episodeTitle,
                     episodeNumber = episodeNumber,
-                    onBack        = { finish() }
+                    onBack = { finish() }
                 )
             }
         }
@@ -130,9 +133,9 @@ class PlayerActivity : ComponentActivity() {
 // ==================== STREAM FETCHER ====================
 @OptIn(UnstableApi::class)
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
-    val cleanId  = episodeId.substringBefore("?ep=").substringBefore("?")
-    val epParam  = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
-    val servers  = listOf("HD-1", "HD-2", "HD-3")
+    val cleanId = episodeId.substringBefore("?ep=").substringBefore("?")
+    val epParam = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
+    val servers = listOf("HD-1", "HD-2", "HD-3")
     val base = "https://byanime-iota.vercel.app/api/stream"
 
     for (server in servers) {
@@ -148,7 +151,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 URL(url).openConnection().apply {
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                     connectTimeout = 15_000
-                    readTimeout    = 15_000
+                    readTimeout = 15_000
                 }.getInputStream().bufferedReader().readText()
             }
 
@@ -158,8 +161,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
 
             if (sources != null && sources.length() > 0) {
                 val first = sources.getJSONObject(0)
-                val m3u8  = first.optString("link").ifBlank { first.optString("file") }
-
+                val m3u8 = first.optString("link").ifBlank { first.optString("file") }
                 if (m3u8.startsWith("http")) {
                     Log.d("PlayerActivity", "✅ Stream found: $server")
 
@@ -170,8 +172,8 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                             val t = arr.getJSONObject(i)
                             val file = t.optString("file").ifBlank { t.optString("url") }
                             if (file.isNotBlank()) {
-                                val label = t.optString("label").ifBlank { 
-                                    t.optString("lang", "English") 
+                                val label = t.optString("label").ifBlank {
+                                    t.optString("lang", "English")
                                 }
                                 val language = t.optString("language").ifBlank {
                                     when {
@@ -183,9 +185,9 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                                     }
                                 }
                                 subtitles += SubtitleTrack(
-                                    url   = file,
+                                    url = file,
                                     label = label,
-                                    kind  = t.optString("kind", "subtitles"),
+                                    kind = t.optString("kind", "subtitles"),
                                     language = language
                                 )
                             }
@@ -212,9 +214,9 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
 // ==================== HELPERS ====================
 fun formatTime(ms: Long): String {
     if (ms <= 0L) return "00:00"
-    val s   = ms / 1000
-    val h   = s / 3600
-    val m   = (s % 3600) / 60
+    val s = ms / 1000
+    val h = s / 3600
+    val m = (s % 3600) / 60
     val sec = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
 }
@@ -223,16 +225,15 @@ fun formatTime(ms: Long): String {
 fun applySubtitleState(player: ExoPlayer, enabled: Boolean, preferredLanguage: String = "en") {
     val builder = player.trackSelectionParameters.buildUpon()
         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
-    
+
     if (enabled) {
         builder
             .setPreferredTextLanguage(preferredLanguage)
             .setPreferredTextRoleFlags(C.ROLE_FLAG_SUBTITLE)
     }
-    
+
     player.trackSelectionParameters = builder.build()
-    
-    // Force refresh track selection after a short delay
+
     kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
         delay(100)
         player.prepare()
@@ -245,7 +246,7 @@ fun getSubtitleMimeType(url: String): String {
         url.endsWith(".srt", true) || url.contains("srt", true) -> MimeTypes.APPLICATION_SUBRIP
         url.endsWith(".ttml", true) || url.endsWith(".xml", true) -> MimeTypes.APPLICATION_TTML
         url.endsWith(".dfxp", true) -> MimeTypes.APPLICATION_TTML
-        else -> MimeTypes.TEXT_VTT // Default fallback
+        else -> MimeTypes.TEXT_VTT
     }
 }
 
@@ -261,20 +262,19 @@ fun SettingsPanel(
     onAspectChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val accent  = Color(0xFF9B59F5)
+    val accent = Color(0xFF9B59F5)
     val panelBg = Color(0xF0111122)
     val divider = Color(0x1FFFFFFF)
-    val chipBg  = Color(0x18FFFFFF)
+    val chipBg = Color(0x18FFFFFF)
 
-    val speedOptions  = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
-    val aspectLabels  = listOf("Fit", "Fill", "Zoom")
-    val aspectIcons   = listOf(
+    val speedOptions = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+    val aspectLabels = listOf("Fit", "Fill", "Zoom")
+    val aspectIcons = listOf(
         Icons.Default.FitScreen,
-        Icons.Default.AspectRatio, // Changed from Fullscreen for clarity
+        Icons.Default.AspectRatio,
         Icons.Default.ZoomOutMap
     )
 
-    // Dismiss on back press or outside tap
     Box(
         Modifier
             .fillMaxSize()
@@ -286,8 +286,8 @@ fun SettingsPanel(
     ) {
         AnimatedVisibility(
             visible = true,
-            enter = slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth }), // Fixed: slide from right
-            exit  = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }), // Fixed: slide to right
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
             Column(
@@ -311,18 +311,14 @@ fun SettingsPanel(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
-                    ) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Close, null, tint = Color(0xFFAAAAAA))
                     }
                 }
                 HorizontalDivider(color = divider, thickness = 0.5.dp)
-
                 Spacer(Modifier.height(20.dp))
 
-                // ── Subtitles ──
+                // Subtitles
                 SectionLabel("SUBTITLES", accent)
                 Spacer(Modifier.height(10.dp))
                 if (hasSubtitles) {
@@ -330,9 +326,9 @@ fun SettingsPanel(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp)
-                            .clickable( // Make entire row clickable
+                            .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = androidx.compose.material.ripple.rememberRipple()
+                                indication = ripple()
                             ) { onSubtitlesToggle(!subtitlesEnabled) },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -350,9 +346,9 @@ fun SettingsPanel(
                             checked = subtitlesEnabled,
                             onCheckedChange = onSubtitlesToggle,
                             colors = SwitchDefaults.colors(
-                                checkedTrackColor   = accent,
+                                checkedTrackColor = accent,
                                 uncheckedTrackColor = Color(0xFF333344),
-                                checkedThumbColor   = Color.White,
+                                checkedThumbColor = Color.White,
                                 uncheckedThumbColor = Color(0xFFAAAAAA)
                             ),
                             modifier = Modifier.size(40.dp)
@@ -371,7 +367,7 @@ fun SettingsPanel(
                 HorizontalDivider(color = divider, thickness = 0.5.dp)
                 Spacer(Modifier.height(20.dp))
 
-                // ── Speed ──
+                // Speed
                 SectionLabel("PLAYBACK SPEED", accent)
                 Spacer(Modifier.height(12.dp))
                 speedOptions.chunked(4).forEach { row ->
@@ -391,7 +387,7 @@ fun SettingsPanel(
                                     .background(if (active) accent else chipBg)
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
-                                        indication = androidx.compose.material.ripple.rememberRipple()
+                                        indication = ripple()
                                     ) { onSpeedChange(speed) },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -410,7 +406,7 @@ fun SettingsPanel(
                 HorizontalDivider(color = divider, thickness = 0.5.dp)
                 Spacer(Modifier.height(20.dp))
 
-                // ── Aspect Ratio ──
+                // Aspect Ratio
                 SectionLabel("ASPECT RATIO", accent)
                 Spacer(Modifier.height(12.dp))
                 Row(
@@ -429,7 +425,7 @@ fun SettingsPanel(
                                 .background(if (active) accent else chipBg)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
-                                    indication = androidx.compose.material.ripple.rememberRipple()
+                                    indication = ripple()
                                 ) { onAspectChange(index) },
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
@@ -478,38 +474,34 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
-    // ── State ──
-    var streamData      by remember { mutableStateOf<StreamData?>(null) }
-    var isLoading       by remember { mutableStateOf(true) }
-    var isBuffering     by remember { mutableStateOf(false) }
-    var errorMsg        by remember { mutableStateOf("") }
-    var showControls    by remember { mutableStateOf(true) }
-    var showSkipIntro   by remember { mutableStateOf(false) }
-    var showSkipOutro   by remember { mutableStateOf(false) }
+    // State
+    var streamData by remember { mutableStateOf<StreamData?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var isBuffering by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf("") }
+    var showControls by remember { mutableStateOf(true) }
+    var showSkipIntro by remember { mutableStateOf(false) }
+    var showSkipOutro by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
-    var totalDuration   by remember { mutableStateOf(1L) }
-    var isPlaying       by remember { mutableStateOf(false) }
-    var isLocked        by remember { mutableStateOf(false) }
-    var currentSpeed    by remember { mutableStateOf(1f) }
-    var seekFeedback    by remember { mutableStateOf("") }
+    var totalDuration by remember { mutableStateOf(1L) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var isLocked by remember { mutableStateOf(false) }
+    var currentSpeed by remember { mutableStateOf(1f) }
+    var seekFeedback by remember { mutableStateOf("") }
     var aspectRatioMode by remember { mutableStateOf(0) }
     var subtitlesEnabled by remember { mutableStateOf(true) }
-    var showSettings    by remember { mutableStateOf(false) }
-    var isSeeking       by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var isSeeking by remember { mutableStateOf(false) }
     var seekDragPosition by remember { mutableStateOf(0L) }
-    var tracksReady     by remember { mutableStateOf(false) }
+    var tracksReady by remember { mutableStateOf(false) }
     var availableSubtitleLanguages by remember { mutableStateOf(setOf<String>()) }
     var selectedSubtitleLang by remember { mutableStateOf("en") }
-    
     var lastInteractionTime by remember { mutableStateOf(0L) }
-
-    // ── ExoPlayer instance ──
-    val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
-
-    // ── Density for layout calculations ──
-    val density = LocalDensity.current
     var sliderWidthPx by remember { mutableStateOf(0f) }
+
+    val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
 
     val aspectModes = remember {
         listOf(
@@ -519,10 +511,10 @@ fun PlayerScreen(
         )
     }
 
-    // ── Fetch stream ──
+    // Fetch stream
     LaunchedEffect(episodeId, category) {
         isLoading = true
-        errorMsg  = ""
+        errorMsg = ""
         streamData = null
         try {
             streamData = fetchStreamData(episodeId, category)
@@ -534,11 +526,9 @@ fun PlayerScreen(
         }
     }
 
-    // ── Build/replace ExoPlayer when stream data is ready ──
+    // Build ExoPlayer
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
-
-        // Release existing player
         playerState.value?.release()
         playerState.value = null
         tracksReady.value = false
@@ -551,8 +541,6 @@ fun PlayerScreen(
             .setUri(data.m3u8Url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
 
-        // Only add subtitles manually if HLS doesn't have embedded tracks
-        // This prevents duplicate subtitle tracks
         if (data.subtitles.isNotEmpty()) {
             val configs = data.subtitles.mapNotNull { sub ->
                 val mimeType = getSubtitleMimeType(sub.url)
@@ -584,12 +572,9 @@ fun PlayerScreen(
                 setMediaSource(source)
                 prepare()
                 playWhenReady = true
-
                 addListener(object : Player.Listener {
                     override fun onTracksChanged(tracks: Tracks) {
                         tracksReady.value = true
-                        
-                        // Update available languages from actual tracks
                         val langs = mutableSetOf<String>()
                         for (group in tracks.groups) {
                             if (group.type == C.TRACK_TYPE_TEXT && group.isSupported) {
@@ -599,95 +584,77 @@ fun PlayerScreen(
                                 }
                             }
                         }
-                        if (langs.isNotEmpty()) {
-                            availableSubtitleLanguages = langs
-                        }
-                        
-                        // Apply subtitle state after tracks are ready
+                        if (langs.isNotEmpty()) availableSubtitleLanguages = langs
                         applySubtitleState(this@apply, subtitlesEnabled, selectedSubtitleLang)
                     }
-                    
+
                     override fun onPlayerError(error: PlaybackException) {
                         errorMsg = "Playback error: ${error.message ?: "Unknown"}"
                         Log.e("PlayerActivity", "Player error", error)
                     }
-                    
+
                     override fun onPlaybackStateChanged(state: Int) {
                         isBuffering = state == Player.STATE_BUFFERING
-                        if (state == Player.STATE_READY) {
-                            errorMsg = "" // Clear error on successful playback
-                        }
+                        if (state == Player.STATE_READY) errorMsg = ""
                     }
-                    
+
                     override fun onIsPlayingChanged(playing: Boolean) {
                         isPlaying = playing
                     }
                 })
             }
-
         playerState.value = player
     }
 
-    // ── Subtitle toggle with retry logic ──
+    // Subtitle handling
     LaunchedEffect(subtitlesEnabled, selectedSubtitleLang) {
         if (tracksReady.value) {
             playerState.value?.let { player ->
                 applySubtitleState(player, subtitlesEnabled, selectedSubtitleLang)
-                // Retry once after delay if needed
-                if (!subtitlesEnabled) {
-                    delay(50)
-                    player.trackSelectionParameters = player.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                        .build()
-                }
             }
         }
     }
 
-    // ── Position polling ──
+    // Position polling
     LaunchedEffect(playerState.value) {
         while (true) {
             delay(250)
             playerState.value?.let { p ->
                 currentPosition = p.currentPosition
-                totalDuration   = p.duration.coerceAtLeast(1L)
-                streamData?.intro?.let { 
-                    showSkipIntro = currentPosition in it.start until it.end && !isLocked 
+                totalDuration = p.duration.coerceAtLeast(1L)
+                streamData?.intro?.let {
+                    showSkipIntro = currentPosition in it.start until it.end && !isLocked
                 }
-                streamData?.outro?.let { 
-                    showSkipOutro = currentPosition in it.start until it.end && !isLocked 
+                streamData?.outro?.let {
+                    showSkipOutro = currentPosition in it.start until it.end && !isLocked
                 }
             }
         }
     }
 
-    // ── Auto-hide controls with interaction tracking ──
+    // Auto-hide controls
     LaunchedEffect(showControls, isLocked, showSettings, isPlaying) {
         if (showControls && !isLocked && !showSettings && isPlaying) {
             val startTime = System.currentTimeMillis()
             lastInteractionTime = startTime
             delay(4000)
-            // Only hide if no interaction occurred during wait
             if (lastInteractionTime == startTime && !showSettings) {
                 showControls = false
             }
         }
     }
-    
-    // Reset auto-hide timer on any interaction
+
     fun resetControlsTimer() {
         lastInteractionTime = System.currentTimeMillis()
         if (!showControls) showControls = true
     }
 
-    // ── Cleanup ──
+    // Cleanup
     DisposableEffect(Unit) {
         onDispose {
             playerState.value?.release()
             playerState.value = null
-            (context as? Activity)?.requestedOrientation =
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -700,40 +667,33 @@ fun PlayerScreen(
         }
     }
 
-    // ── UI ──
+    // UI
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { 
-                        if (!isLocked) {
-                            resetControlsTimer()
-                        }
-                    }
-                )
+                detectTapGestures { if (!isLocked) resetControlsTimer() }
             }
     ) {
-
-        // ── PlayerView ──
+        // Player
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    useController  = false
-                    keepScreenOn   = true
-                    resizeMode     = aspectModes[aspectRatioMode]
+                    useController = false
+                    keepScreenOn = true
+                    resizeMode = aspectModes[aspectRatioMode]
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
             },
             modifier = Modifier.fillMaxSize(),
             update = { view ->
-                view.player     = playerState.value
+                view.player = playerState.value
                 view.resizeMode = aspectModes[aspectRatioMode]
             }
         )
 
-        // ── Loading overlay ──
+        // Loading
         if (isLoading) {
             Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -743,12 +703,9 @@ fun PlayerScreen(
             }
         }
 
-        // ── Error overlay with retry ──
+        // Error
         if (errorMsg.isNotEmpty() && !isLoading) {
-            Box(
-                Modifier.fillMaxSize().background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -760,7 +717,7 @@ fun PlayerScreen(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
-                            onClick = { 
+                            onClick = {
                                 isLoading = true
                                 errorMsg = ""
                                 scope.launch {
@@ -792,18 +749,18 @@ fun PlayerScreen(
             }
         }
 
-        // ── Buffering spinner ──
+        // Buffering
         if (isBuffering && !isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
-                    color = Color(0xFF9B59F5), 
-                    strokeWidth = 3.dp, 
+                    color = Color(0xFF9B59F5),
+                    strokeWidth = 3.dp,
                     modifier = Modifier.size(44.dp)
                 )
             }
         }
 
-        // ── Double-tap zones ──
+        // Double-tap seek zones
         if (!isLocked) {
             Row(Modifier.fillMaxSize()) {
                 Box(
@@ -812,10 +769,7 @@ fun PlayerScreen(
                         .fillMaxHeight()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onDoubleTap = { 
-                                    seekBy(-10_000L)
-                                    resetControlsTimer()
-                                },
+                                onDoubleTap = { seekBy(-10_000L); resetControlsTimer() },
                                 onTap = { resetControlsTimer() }
                             )
                         }
@@ -826,10 +780,7 @@ fun PlayerScreen(
                         .fillMaxHeight()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onDoubleTap = { 
-                                    seekBy(+10_000L)
-                                    resetControlsTimer()
-                                },
+                                onDoubleTap = { seekBy(10_000L); resetControlsTimer() },
                                 onTap = { resetControlsTimer() }
                             )
                         }
@@ -837,11 +788,11 @@ fun PlayerScreen(
             }
         }
 
-        // ── Controls overlay ──
+        // Controls overlay
         AnimatedVisibility(
-            visible  = showControls,
-            enter    = fadeIn(tween(200)),
-            exit     = fadeOut(tween(300)),
+            visible = showControls,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(300)),
             modifier = Modifier.fillMaxSize()
         ) {
             Box(
@@ -849,13 +800,10 @@ fun PlayerScreen(
                     .fillMaxSize()
                     .background(Color(0x55000000))
                     .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { resetControlsTimer() }
-                        )
+                        detectTapGestures { resetControlsTimer() }
                     }
             ) {
-
-                // ── Top bar ──
+                // Top bar
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -880,7 +828,7 @@ fun PlayerScreen(
                     }
                     if (!isLocked) {
                         IconButton(
-                            onClick = { 
+                            onClick = {
                                 showSettings = !showSettings
                                 resetControlsTimer()
                             },
@@ -890,7 +838,7 @@ fun PlayerScreen(
                         }
                     }
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             isLocked = !isLocked
                             resetControlsTimer()
                         },
@@ -904,7 +852,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // ── Center controls ──
+                // Center controls
                 if (!isLocked) {
                     Row(
                         Modifier
@@ -916,18 +864,10 @@ fun PlayerScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
-                                onClick = { 
-                                    seekBy(-10_000L)
-                                    resetControlsTimer()
-                                },
+                                onClick = { seekBy(-10_000L); resetControlsTimer() },
                                 modifier = Modifier.size(52.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Replay10,
-                                    null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
+                                Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(36.dp))
                             }
                             Text("-10s", color = Color(0xFFCCCCCC), fontSize = 10.sp)
                         }
@@ -939,7 +879,7 @@ fun PlayerScreen(
                                 .background(Color(0xFF9B59F5))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
-                                    indication = androidx.compose.material.ripple.rememberRipple()
+                                    indication = ripple()
                                 ) {
                                     playerState.value?.let { it.playWhenReady = !isPlaying }
                                     resetControlsTimer()
@@ -956,25 +896,17 @@ fun PlayerScreen(
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
-                                onClick = { 
-                                    seekBy(+10_000L)
-                                    resetControlsTimer()
-                                },
+                                onClick = { seekBy(10_000L); resetControlsTimer() },
                                 modifier = Modifier.size(52.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Forward10,
-                                    null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
+                                Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(36.dp))
                             }
                             Text("+10s", color = Color(0xFFCCCCCC), fontSize = 10.sp)
                         }
                     }
                 }
 
-                // ── Bottom bar ──
+                // Bottom bar + progress
                 if (!isLocked) {
                     Column(
                         Modifier
@@ -992,7 +924,7 @@ fun PlayerScreen(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .height(24.dp) // Increased height for better touch target
+                                .height(24.dp)
                                 .onGloballyPositioned { sliderWidthPx = it.size.width.toFloat() }
                                 .pointerInput(totalDuration, sliderWidthPx) {
                                     detectHorizontalDragGestures(
@@ -1007,7 +939,7 @@ fun PlayerScreen(
                                             isSeeking = false
                                             resetControlsTimer()
                                         },
-                                        onDragCancel = { 
+                                        onDragCancel = {
                                             isSeeking = false
                                             resetControlsTimer()
                                         },
@@ -1047,26 +979,23 @@ fun PlayerScreen(
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(Color(0xFF9B59F5))
                             )
-                            // Thumb — Fixed: properly centered using radius
+                            // Thumb
                             Box(
                                 Modifier
                                     .align(Alignment.CenterStart)
-                                    .offset { 
-                                        val thumbOffset = (progress * sliderWidthPx) - 6.dp.toPx()
+                                    .offset {
+                                        val thumbOffset = (progress * sliderWidthPx) - with(density) { 6.dp.toPx() }
                                         IntOffset(thumbOffset.toInt(), 0)
                                     }
                                     .size(12.dp)
                                     .clip(CircleShape)
                                     .background(Color.White)
-                                    .shadow(2.dp, CircleShape) // Added shadow for visibility
+                                    .shadow(2.dp, CircleShape)
                             )
                         }
 
                         Spacer(Modifier.height(6.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
                                 formatTime(if (isSeeking) seekDragPosition else currentPosition),
                                 color = Color.White,
@@ -1074,8 +1003,8 @@ fun PlayerScreen(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                formatTime(totalDuration), 
-                                color = Color(0xFFAAAAAA), 
+                                formatTime(totalDuration),
+                                color = Color(0xFFAAAAAA),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -1085,39 +1014,27 @@ fun PlayerScreen(
             }
         }
 
-        // ── Skip buttons with proper positioning ──
+        // Skip buttons
         val skipButtonPadding = 24.dp
         val skipButtonBottom = 80.dp + if (showControls && !isLocked) 60.dp else 0.dp
-        
+
+        val gradientBrush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
+
         if (showSkipIntro && !showSkipOutro) {
             OutlinedButton(
-                onClick = { 
+                onClick = {
                     streamData?.intro?.let { playerState.value?.seekTo(it.end) }
                     resetControlsTimer()
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = skipButtonPadding, bottom = skipButtonBottom),
-                border = androidx.compose.ui.graphics.Outline.AsRounded(
-                    RoundedCornerShape(8.dp)
-                ).let { 
-                    androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 2.dp.toPx(),
-                        brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
-                    )
-                }.run {
-                    ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                        brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
-                    )
-                },
+                border = BorderStroke(width = 2.dp, brush = gradientBrush),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color.White,
                     containerColor = Color(0x80000000)
-                ),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = skipButtonPadding, bottom = skipButtonBottom)
+                )
             ) {
                 Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -1127,16 +1044,14 @@ fun PlayerScreen(
 
         if (showSkipOutro) {
             OutlinedButton(
-                onClick = { 
+                onClick = {
                     streamData?.outro?.let { playerState.value?.seekTo(it.end) }
                     resetControlsTimer()
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = skipButtonPadding, bottom = skipButtonBottom),
-                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                    brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
-                ),
+                border = BorderStroke(width = 2.dp, brush = gradientBrush),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color.White,
@@ -1149,11 +1064,11 @@ fun PlayerScreen(
             }
         }
 
-        // ── Seek feedback toast ──
+        // Seek feedback
         AnimatedVisibility(
             visible = seekFeedback.isNotEmpty(),
-            enter   = fadeIn() + scaleIn(initialScale = 0.8f),
-            exit    = fadeOut(),
+            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit = fadeOut(),
             modifier = Modifier.align(Alignment.Center)
         ) {
             LaunchedEffect(seekFeedback) {
@@ -1169,26 +1084,26 @@ fun PlayerScreen(
             }
         }
 
-        // ── Settings panel ──
+        // Settings panel
         if (showSettings) {
             SettingsPanel(
-                hasSubtitles     = availableSubtitleLanguages.isNotEmpty() || (streamData?.subtitles?.isNotEmpty() == true),
+                hasSubtitles = availableSubtitleLanguages.isNotEmpty() || (streamData?.subtitles?.isNotEmpty() == true),
                 subtitlesEnabled = subtitlesEnabled,
                 onSubtitlesToggle = { enabled ->
                     subtitlesEnabled = enabled
                     if (enabled && availableSubtitleLanguages.isNotEmpty()) {
-                        selectedSubtitleLang = availableSubtitleLanguages.firstOrNull { it.startsWith("en") } 
+                        selectedSubtitleLang = availableSubtitleLanguages.firstOrNull { it.startsWith("en") }
                             ?: availableSubtitleLanguages.first()
                     }
                 },
-                currentSpeed     = currentSpeed,
-                onSpeedChange    = { speed ->
+                currentSpeed = currentSpeed,
+                onSpeedChange = { speed ->
                     currentSpeed = speed
                     playerState.value?.setPlaybackParameters(PlaybackParameters(speed))
                 },
-                aspectRatioMode  = aspectRatioMode,
-                onAspectChange   = { aspectRatioMode = it },
-                onDismiss        = { showSettings = false }
+                aspectRatioMode = aspectRatioMode,
+                onAspectChange = { aspectRatioMode = it },
+                onDismiss = { showSettings = false }
             )
         }
     }
