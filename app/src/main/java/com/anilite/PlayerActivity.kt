@@ -503,12 +503,15 @@ fun PlayerScreen(
 
         val source = HlsMediaSource.Factory(factory).createMediaSource(itemBuilder.build())
 
-        val player = ExoPlayer.Builder(context).build().apply {
-            setMediaSource(source)
-            prepare()
-            playWhenReady = true
+        val player = ExoPlayer.Builder(context)
+            .setHandleAudioAttributes(true)
+            .build()
+            .apply {
+                setMediaSource(source)
+                prepare()
+                playWhenReady = true
 
-            addListener(object : Player.Listener {
+                addListener(object : Player.Listener {
                 override fun onTracksChanged(tracks: Tracks) {
                     tracksReady.value = true
                     applySubtitleState(this@apply, subtitlesEnabled)
@@ -601,7 +604,6 @@ fun PlayerScreen(
                     Text("Loading stream…", color = Color(0xFFCCCCCC), fontSize = 14.sp)
                 }
             }
-            return@Box
         }
 
         // ── Error overlay ──
@@ -630,7 +632,6 @@ fun PlayerScreen(
                     }
                 }
             }
-            return@Box
         }
 
         // ── Buffering spinner ──
