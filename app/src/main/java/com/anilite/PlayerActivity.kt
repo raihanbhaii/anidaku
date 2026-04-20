@@ -13,14 +13,14 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -28,11 +28,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +62,7 @@ import androidx.media3.ui.PlayerView
 import com.anilite.ui.theme.AnidakuTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
@@ -77,7 +78,8 @@ data class StreamData(
 data class SubtitleTrack(
     val url: String,
     val label: String,
-    val kind: String
+    val kind: String,
+    val language: String = "en" // Added language field
 )
 
 data class SkipSegment(
@@ -140,58 +142,70 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 append("&server=$server&type=$category")
                 if (epParam.isNotEmpty()) append("&ep=$epParam")
             }
-                Log.d("PlayerActivity", "Trying: $url")
+            Log.d("PlayerActivity", "Trying: $url")
 
-                val response = withContext(Dispatchers.IO) {
-                    URL(url).openConnection().apply {
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                        connectTimeout = 15_000
-                        readTimeout    = 15_000
-                    }.getInputStream().bufferedReader().readText()
-                }
+            val response = withContext(Dispatchers.IO) {
+                URL(url).openConnection().apply {
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    connectTimeout = 15_000
+                    readTimeout    = 15_000
+                }.getInputStream().bufferedReader().readText()
+            }
 
-                val root = JSONObject(response)
-                val json = root.optJSONObject("results") ?: root
-                val sources = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
+            val root = JSONObject(response)
+            val json = root.optJSONObject("results") ?: root
+            val sources = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
 
-                if (sources != null && sources.length() > 0) {
-                    val first = sources.getJSONObject(0)
-                    val m3u8  = first.optString("link").ifBlank { first.optString("file") }
+            if (sources != null && sources.length() > 0) {
+                val first = sources.getJSONObject(0)
+                val m3u8  = first.optString("link").ifBlank { first.optString("file") }
 
-                    if (m3u8.startsWith("http")) {
-                        Log.d("PlayerActivity", "✅ Stream found: $server")
+                if (m3u8.startsWith("http")) {
+                    Log.d("PlayerActivity", "✅ Stream found: $server")
 
-                        val subtitles = mutableListOf<SubtitleTrack>()
-                        // Check both "tracks" and "subtitles" fields
-                        val tracksArr = json.optJSONArray("tracks") ?: json.optJSONArray("subtitles")
-                        tracksArr?.let { arr ->
-                            for (i in 0 until arr.length()) {
-                                val t = arr.getJSONObject(i)
-                                val file = t.optString("file").ifBlank { t.optString("url") }
-                                if (file.isNotBlank()) {
-                                    subtitles += SubtitleTrack(
-                                        url   = file,
-                                        label = t.optString("label").ifBlank { t.optString("lang", "English") },
-                                        kind  = t.optString("kind",  "subtitles")
-                                    )
+                    val subtitles = mutableListOf<SubtitleTrack>()
+                    val tracksArr = json.optJSONArray("tracks") ?: json.optJSONArray("subtitles")
+                    tracksArr?.let { arr ->
+                        for (i in 0 until arr.length()) {
+                            val t = arr.getJSONObject(i)
+                            val file = t.optString("file").ifBlank { t.optString("url") }
+                            if (file.isNotBlank()) {
+                                val label = t.optString("label").ifBlank { 
+                                    t.optString("lang", "English") 
                                 }
+                                val language = t.optString("language").ifBlank {
+                                    when {
+                                        label.contains("english", true) -> "en"
+                                        label.contains("spanish", true) -> "es"
+                                        label.contains("french", true) -> "fr"
+                                        label.contains("portuguese", true) -> "pt"
+                                        else -> "en"
+                                    }
+                                }
+                                subtitles += SubtitleTrack(
+                                    url   = file,
+                                    label = label,
+                                    kind  = t.optString("kind", "subtitles"),
+                                    language = language
+                                )
                             }
                         }
-
-                        val intro = json.optJSONObject("intro")?.let {
-                            SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
-                        }
-                        val outro = json.optJSONObject("outro")?.let {
-                            SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
-                        }
-
-                        return StreamData(m3u8, subtitles, intro, outro)
                     }
+
+                    val intro = json.optJSONObject("intro")?.let {
+                        SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
+                    }
+                    val outro = json.optJSONObject("outro")?.let {
+                        SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
+                    }
+
+                    return StreamData(m3u8, subtitles, intro, outro)
                 }
-            } catch (e: Exception) {
-                Log.w("PlayerActivity", "[$base][$server] failed: ${e.message}")
             }
+        } catch (e: Exception) {
+            Log.w("PlayerActivity", "[$base][$server] failed: ${e.message}")
         }
+    }
     throw Exception("All servers failed. Please try again later.")
 }
 
@@ -206,31 +220,32 @@ fun formatTime(ms: Long): String {
 }
 
 @OptIn(UnstableApi::class)
-fun applySubtitleState(player: ExoPlayer, enabled: Boolean) {
-    if (!enabled) {
-        player.trackSelectionParameters = player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            .build()
-    } else {
-        // Enable text tracks and try to select the first available one
-        player.trackSelectionParameters = player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setPreferredTextLanguage("en")
-            .build()
-            
-        // Force selection of the first text track if available
-        val tracks = player.currentTracks
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_TEXT) {
-                player.trackSelectionParameters = player.trackSelectionParameters
-                    .buildUpon()
-                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
-                    .build()
-                break
-            }
-        }
+fun applySubtitleState(player: ExoPlayer, enabled: Boolean, preferredLanguage: String = "en") {
+    val builder = player.trackSelectionParameters.buildUpon()
+        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
+    
+    if (enabled) {
+        builder
+            .setPreferredTextLanguage(preferredLanguage)
+            .setPreferredTextRoleFlags(C.ROLE_FLAG_SUBTITLE)
+    }
+    
+    player.trackSelectionParameters = builder.build()
+    
+    // Force refresh track selection after a short delay
+    kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
+        delay(100)
+        player.prepare()
+    }
+}
+
+fun getSubtitleMimeType(url: String): String {
+    return when {
+        url.endsWith(".vtt", true) || url.contains("vtt", true) -> MimeTypes.TEXT_VTT
+        url.endsWith(".srt", true) || url.contains("srt", true) -> MimeTypes.APPLICATION_SUBRIP
+        url.endsWith(".ttml", true) || url.endsWith(".xml", true) -> MimeTypes.APPLICATION_TTML
+        url.endsWith(".dfxp", true) -> MimeTypes.APPLICATION_TTML
+        else -> MimeTypes.TEXT_VTT // Default fallback
     }
 }
 
@@ -255,21 +270,24 @@ fun SettingsPanel(
     val aspectLabels  = listOf("Fit", "Fill", "Zoom")
     val aspectIcons   = listOf(
         Icons.Default.FitScreen,
-        Icons.Default.Fullscreen,
+        Icons.Default.AspectRatio, // Changed from Fullscreen for clarity
         Icons.Default.ZoomOutMap
     )
 
+    // Dismiss on back press or outside tap
     Box(
         Modifier
             .fillMaxSize()
             .background(Color(0x66000000))
-            .clickable(indication = null,
-                interactionSource = remember { MutableInteractionSource() }) { onDismiss() }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() }
     ) {
         AnimatedVisibility(
             visible = true,
-            enter = slideInHorizontally(initialOffsetX = { it }),
-            exit  = slideOutHorizontally(targetOffsetX = { it }),
+            enter = slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth }), // Fixed: slide from right
+            exit  = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }), // Fixed: slide to right
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
             Column(
@@ -277,8 +295,10 @@ fun SettingsPanel(
                     .width(300.dp)
                     .fillMaxHeight()
                     .background(panelBg)
-                    .clickable(indication = null,
-                        interactionSource = remember { MutableInteractionSource() }) {}
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {}
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 32.dp)
             ) {
@@ -291,7 +311,10 @@ fun SettingsPanel(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
                         Icon(Icons.Default.Close, null, tint = Color(0xFFAAAAAA))
                     }
                 }
@@ -306,7 +329,11 @@ fun SettingsPanel(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
+                            .padding(horizontal = 20.dp)
+                            .clickable( // Make entire row clickable
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = androidx.compose.material.ripple.rememberRipple()
+                            ) { onSubtitlesToggle(!subtitlesEnabled) },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -324,8 +351,11 @@ fun SettingsPanel(
                             onCheckedChange = onSubtitlesToggle,
                             colors = SwitchDefaults.colors(
                                 checkedTrackColor   = accent,
-                                uncheckedTrackColor = Color(0xFF333344)
-                            )
+                                uncheckedTrackColor = Color(0xFF333344),
+                                checkedThumbColor   = Color.White,
+                                uncheckedThumbColor = Color(0xFFAAAAAA)
+                            ),
+                            modifier = Modifier.size(40.dp)
                         )
                     }
                 } else {
@@ -359,7 +389,10 @@ fun SettingsPanel(
                                     .height(40.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (active) accent else chipBg)
-                                    .clickable { onSpeedChange(speed) },
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = androidx.compose.material.ripple.rememberRipple()
+                                    ) { onSpeedChange(speed) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -394,7 +427,10 @@ fun SettingsPanel(
                                 .height(64.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (active) accent else chipBg)
-                                .clickable { onAspectChange(index) },
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = androidx.compose.material.ripple.rememberRipple()
+                                ) { onAspectChange(index) },
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
@@ -441,6 +477,7 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // ── State ──
     var streamData      by remember { mutableStateOf<StreamData?>(null) }
@@ -461,12 +498,16 @@ fun PlayerScreen(
     var showSettings    by remember { mutableStateOf(false) }
     var isSeeking       by remember { mutableStateOf(false) }
     var seekDragPosition by remember { mutableStateOf(0L) }
-    val tracksReady     = remember { mutableStateOf(false) }
+    var tracksReady     by remember { mutableStateOf(false) }
+    var availableSubtitleLanguages by remember { mutableStateOf(setOf<String>()) }
+    var selectedSubtitleLang by remember { mutableStateOf("en") }
+    
+    var lastInteractionTime by remember { mutableStateOf(0L) }
 
     // ── ExoPlayer instance ──
     val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
 
-    // ── Hoist density into composable scope (FIX) ──
+    // ── Density for layout calculations ──
     val density = LocalDensity.current
     var sliderWidthPx by remember { mutableStateOf(0f) }
 
@@ -497,6 +538,7 @@ fun PlayerScreen(
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
 
+        // Release existing player
         playerState.value?.release()
         playerState.value = null
         tracksReady.value = false
@@ -509,21 +551,28 @@ fun PlayerScreen(
             .setUri(data.m3u8Url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
 
+        // Only add subtitles manually if HLS doesn't have embedded tracks
+        // This prevents duplicate subtitle tracks
         if (data.subtitles.isNotEmpty()) {
-            val configs = data.subtitles.map { sub ->
-                val mimeType = when {
-                    sub.url.endsWith(".vtt", true) -> MimeTypes.TEXT_VTT
-                    sub.url.endsWith(".srt", true) -> MimeTypes.APPLICATION_SUBRIP
-                    else -> MimeTypes.TEXT_VTT // Default to VTT
+            val configs = data.subtitles.mapNotNull { sub ->
+                val mimeType = getSubtitleMimeType(sub.url)
+                try {
+                    SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
+                        .setMimeType(mimeType)
+                        .setLanguage(sub.language)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
+                        .setLabel(sub.label)
+                        .build()
+                } catch (e: Exception) {
+                    Log.w("PlayerActivity", "Failed to add subtitle: ${sub.url}", e)
+                    null
                 }
-                SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
-                    .setMimeType(mimeType)
-                    .setLanguage("en")
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                    .setLabel(sub.label)
-                    .build()
             }
-            itemBuilder.setSubtitleConfigurations(configs)
+            if (configs.isNotEmpty()) {
+                itemBuilder.setSubtitleConfigurations(configs)
+                availableSubtitleLanguages = data.subtitles.map { it.language }.toSet()
+            }
         }
 
         val source = HlsMediaSource.Factory(factory).createMediaSource(itemBuilder.build())
@@ -537,30 +586,62 @@ fun PlayerScreen(
                 playWhenReady = true
 
                 addListener(object : Player.Listener {
-                override fun onTracksChanged(tracks: Tracks) {
-                    tracksReady.value = true
-                    applySubtitleState(this@apply, subtitlesEnabled)
-                }
-                override fun onPlayerError(error: PlaybackException) {
-                    errorMsg = "Playback error: ${error.message ?: "Unknown"}"
-                    Log.e("PlayerActivity", "Player error", error)
-                }
-                override fun onPlaybackStateChanged(state: Int) {
-                    isBuffering = state == Player.STATE_BUFFERING
-                }
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
-                }
-            })
-        }
+                    override fun onTracksChanged(tracks: Tracks) {
+                        tracksReady.value = true
+                        
+                        // Update available languages from actual tracks
+                        val langs = mutableSetOf<String>()
+                        for (group in tracks.groups) {
+                            if (group.type == C.TRACK_TYPE_TEXT && group.isSupported) {
+                                for (i in 0 until group.mediaTrackGroup.length) {
+                                    val format = group.mediaTrackGroup.getFormat(i)
+                                    format.language?.let { langs.add(it) }
+                                }
+                            }
+                        }
+                        if (langs.isNotEmpty()) {
+                            availableSubtitleLanguages = langs
+                        }
+                        
+                        // Apply subtitle state after tracks are ready
+                        applySubtitleState(this@apply, subtitlesEnabled, selectedSubtitleLang)
+                    }
+                    
+                    override fun onPlayerError(error: PlaybackException) {
+                        errorMsg = "Playback error: ${error.message ?: "Unknown"}"
+                        Log.e("PlayerActivity", "Player error", error)
+                    }
+                    
+                    override fun onPlaybackStateChanged(state: Int) {
+                        isBuffering = state == Player.STATE_BUFFERING
+                        if (state == Player.STATE_READY) {
+                            errorMsg = "" // Clear error on successful playback
+                        }
+                    }
+                    
+                    override fun onIsPlayingChanged(playing: Boolean) {
+                        isPlaying = playing
+                    }
+                })
+            }
 
         playerState.value = player
     }
 
-    // ── Subtitle toggle ──
-    LaunchedEffect(subtitlesEnabled, tracksReady.value) {
+    // ── Subtitle toggle with retry logic ──
+    LaunchedEffect(subtitlesEnabled, selectedSubtitleLang) {
         if (tracksReady.value) {
-            playerState.value?.let { applySubtitleState(it, subtitlesEnabled) }
+            playerState.value?.let { player ->
+                applySubtitleState(player, subtitlesEnabled, selectedSubtitleLang)
+                // Retry once after delay if needed
+                if (!subtitlesEnabled) {
+                    delay(50)
+                    player.trackSelectionParameters = player.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                        .build()
+                }
+            }
         }
     }
 
@@ -571,18 +652,33 @@ fun PlayerScreen(
             playerState.value?.let { p ->
                 currentPosition = p.currentPosition
                 totalDuration   = p.duration.coerceAtLeast(1L)
-                streamData?.intro?.let { showSkipIntro = currentPosition in it.start until it.end }
-                streamData?.outro?.let { showSkipOutro = currentPosition in it.start until it.end }
+                streamData?.intro?.let { 
+                    showSkipIntro = currentPosition in it.start until it.end && !isLocked 
+                }
+                streamData?.outro?.let { 
+                    showSkipOutro = currentPosition in it.start until it.end && !isLocked 
+                }
             }
         }
     }
 
-    // ── Auto-hide controls ──
+    // ── Auto-hide controls with interaction tracking ──
     LaunchedEffect(showControls, isLocked, showSettings, isPlaying) {
         if (showControls && !isLocked && !showSettings && isPlaying) {
+            val startTime = System.currentTimeMillis()
+            lastInteractionTime = startTime
             delay(4000)
-            showControls = false
+            // Only hide if no interaction occurred during wait
+            if (lastInteractionTime == startTime && !showSettings) {
+                showControls = false
+            }
         }
+    }
+    
+    // Reset auto-hide timer on any interaction
+    fun resetControlsTimer() {
+        lastInteractionTime = System.currentTimeMillis()
+        if (!showControls) showControls = true
     }
 
     // ── Cleanup ──
@@ -597,13 +693,28 @@ fun PlayerScreen(
 
     fun seekBy(ms: Long) {
         playerState.value?.let { p ->
-            p.seekTo((p.currentPosition + ms).coerceAtLeast(0L))
+            val newPos = (p.currentPosition + ms).coerceIn(0L, totalDuration)
+            p.seekTo(newPos)
             seekFeedback = if (ms > 0) "+${ms / 1000}s" else "${ms / 1000}s"
+            resetControlsTimer()
         }
     }
 
     // ── UI ──
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { 
+                        if (!isLocked) {
+                            resetControlsTimer()
+                        }
+                    }
+                )
+            }
+    ) {
 
         // ── PlayerView ──
         AndroidView(
@@ -612,6 +723,7 @@ fun PlayerScreen(
                     useController  = false
                     keepScreenOn   = true
                     resizeMode     = aspectModes[aspectRatioMode]
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -631,8 +743,8 @@ fun PlayerScreen(
             }
         }
 
-        // ── Error overlay ──
-        if (errorMsg.isNotEmpty()) {
+        // ── Error overlay with retry ──
+        if (errorMsg.isNotEmpty() && !isLoading) {
             Box(
                 Modifier.fillMaxSize().background(Color.Black),
                 contentAlignment = Alignment.Center
@@ -646,23 +758,48 @@ fun PlayerScreen(
                     Text("Stream Unavailable", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text(errorMsg, color = Color(0xFF888888), fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = { (context as? Activity)?.finish() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Go Back")
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { 
+                                isLoading = true
+                                errorMsg = ""
+                                scope.launch {
+                                    try {
+                                        streamData = fetchStreamData(episodeId, category)
+                                    } catch (e: Exception) {
+                                        errorMsg = e.message ?: "Retry failed"
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Retry")
+                        }
+                        OutlinedButton(
+                            onClick = { (context as? Activity)?.finish() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Go Back")
+                        }
                     }
                 }
             }
         }
 
         // ── Buffering spinner ──
-        if (isBuffering) {
+        if (isBuffering && !isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF9B59F5), strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
+                CircularProgressIndicator(
+                    color = Color(0xFF9B59F5), 
+                    strokeWidth = 3.dp, 
+                    modifier = Modifier.size(44.dp)
+                )
             }
         }
 
@@ -670,28 +807,34 @@ fun PlayerScreen(
         if (!isLocked) {
             Row(Modifier.fillMaxSize()) {
                 Box(
-                    Modifier.weight(1f).fillMaxHeight().pointerInput(Unit) {
-                        detectTapGestures(
-                            onDoubleTap = { seekBy(-10_000L) },
-                            onTap       = { showControls = !showControls }
-                        )
-                    }
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = { 
+                                    seekBy(-10_000L)
+                                    resetControlsTimer()
+                                },
+                                onTap = { resetControlsTimer() }
+                            )
+                        }
                 )
                 Box(
-                    Modifier.weight(1f).fillMaxHeight().pointerInput(Unit) {
-                        detectTapGestures(
-                            onDoubleTap = { seekBy(+10_000L) },
-                            onTap       = { showControls = !showControls }
-                        )
-                    }
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = { 
+                                    seekBy(+10_000L)
+                                    resetControlsTimer()
+                                },
+                                onTap = { resetControlsTimer() }
+                            )
+                        }
                 )
             }
-        } else {
-            Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    detectTapGestures(onTap = { showControls = !showControls })
-                }
-            )
         }
 
         // ── Controls overlay ──
@@ -701,7 +844,16 @@ fun PlayerScreen(
             exit     = fadeOut(tween(300)),
             modifier = Modifier.fillMaxSize()
         ) {
-            Box(Modifier.fillMaxSize().background(Color(0x55000000))) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x55000000))
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { resetControlsTimer() }
+                        )
+                    }
+            ) {
 
                 // ── Top bar ──
                 Row(
@@ -727,11 +879,23 @@ fun PlayerScreen(
                         Text("Episode $episodeNumber", color = Color(0xFFAAAAAA), fontSize = 12.sp)
                     }
                     if (!isLocked) {
-                        IconButton(onClick = { showSettings = !showSettings }) {
+                        IconButton(
+                            onClick = { 
+                                showSettings = !showSettings
+                                resetControlsTimer()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
                             Icon(Icons.Default.Settings, null, tint = Color.White)
                         }
                     }
-                    IconButton(onClick = { isLocked = !isLocked }) {
+                    IconButton(
+                        onClick = { 
+                            isLocked = !isLocked
+                            resetControlsTimer()
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(
                             if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                             null,
@@ -752,7 +916,10 @@ fun PlayerScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
-                                onClick = { seekBy(-10_000L) },
+                                onClick = { 
+                                    seekBy(-10_000L)
+                                    resetControlsTimer()
+                                },
                                 modifier = Modifier.size(52.dp)
                             ) {
                                 Icon(
@@ -762,6 +929,7 @@ fun PlayerScreen(
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
+                            Text("-10s", color = Color(0xFFCCCCCC), fontSize = 10.sp)
                         }
 
                         Box(
@@ -769,8 +937,12 @@ fun PlayerScreen(
                                 .size(64.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF9B59F5))
-                                .clickable {
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = androidx.compose.material.ripple.rememberRipple()
+                                ) {
                                     playerState.value?.let { it.playWhenReady = !isPlaying }
+                                    resetControlsTimer()
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -784,7 +956,10 @@ fun PlayerScreen(
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
-                                onClick = { seekBy(+10_000L) },
+                                onClick = { 
+                                    seekBy(+10_000L)
+                                    resetControlsTimer()
+                                },
                                 modifier = Modifier.size(52.dp)
                             ) {
                                 Icon(
@@ -794,6 +969,7 @@ fun PlayerScreen(
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
+                            Text("+10s", color = Color(0xFFCCCCCC), fontSize = 10.sp)
                         }
                     }
                 }
@@ -816,7 +992,7 @@ fun PlayerScreen(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .height(20.dp)
+                                .height(24.dp) // Increased height for better touch target
                                 .onGloballyPositioned { sliderWidthPx = it.size.width.toFloat() }
                                 .pointerInput(totalDuration, sliderWidthPx) {
                                     detectHorizontalDragGestures(
@@ -829,8 +1005,12 @@ fun PlayerScreen(
                                         onDragEnd = {
                                             playerState.value?.seekTo(seekDragPosition)
                                             isSeeking = false
+                                            resetControlsTimer()
                                         },
-                                        onDragCancel = { isSeeking = false },
+                                        onDragCancel = { 
+                                            isSeeking = false
+                                            resetControlsTimer()
+                                        },
                                         onHorizontalDrag = { _, dragAmount ->
                                             if (sliderWidthPx > 0) {
                                                 val delta = (dragAmount / sliderWidthPx * totalDuration).toLong()
@@ -844,6 +1024,7 @@ fun PlayerScreen(
                                         if (sliderWidthPx > 0) {
                                             val p = (offset.x / sliderWidthPx).coerceIn(0f, 1f)
                                             playerState.value?.seekTo((p * totalDuration).toLong())
+                                            resetControlsTimer()
                                         }
                                     }
                                 },
@@ -853,7 +1034,7 @@ fun PlayerScreen(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(3.dp)
+                                    .height(4.dp)
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(Color(0x44FFFFFF))
                             )
@@ -861,19 +1042,23 @@ fun PlayerScreen(
                             Box(
                                 Modifier
                                     .fillMaxWidth(progress)
-                                    .height(3.dp)
+                                    .height(4.dp)
                                     .align(Alignment.CenterStart)
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(Color(0xFF9B59F5))
                             )
-                            // Thumb — FIX: use hoisted `density` from composable scope
+                            // Thumb — Fixed: properly centered using radius
                             Box(
                                 Modifier
                                     .align(Alignment.CenterStart)
-                                    .offset(x = with(density) { (progress * sliderWidthPx).toDp() } - 6.dp)
+                                    .offset { 
+                                        val thumbOffset = (progress * sliderWidthPx) - 6.dp.toPx()
+                                        IntOffset(thumbOffset.toInt(), 0)
+                                    }
                                     .size(12.dp)
                                     .clip(CircleShape)
                                     .background(Color.White)
+                                    .shadow(2.dp, CircleShape) // Added shadow for visibility
                             )
                         }
 
@@ -885,27 +1070,54 @@ fun PlayerScreen(
                             Text(
                                 formatTime(if (isSeeking) seekDragPosition else currentPosition),
                                 color = Color.White,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
                             )
-                            Text(formatTime(totalDuration), color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                            Text(
+                                formatTime(totalDuration), 
+                                color = Color(0xFFAAAAAA), 
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
             }
         }
 
-        // ── Skip Intro button ──
-        if (showSkipIntro) {
+        // ── Skip buttons with proper positioning ──
+        val skipButtonPadding = 24.dp
+        val skipButtonBottom = 80.dp + if (showControls && !isLocked) 60.dp else 0.dp
+        
+        if (showSkipIntro && !showSkipOutro) {
             OutlinedButton(
-                onClick = { streamData?.intro?.let { playerState.value?.seekTo(it.end) } },
+                onClick = { 
+                    streamData?.intro?.let { playerState.value?.seekTo(it.end) }
+                    resetControlsTimer()
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 80.dp),
-                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                    brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
-                ),
+                    .padding(end = skipButtonPadding, bottom = skipButtonBottom),
+                border = androidx.compose.ui.graphics.Outline.AsRounded(
+                    RoundedCornerShape(8.dp)
+                ).let { 
+                    androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 2.dp.toPx(),
+                        brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
+                    )
+                }.run {
+                    ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                        brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
+                    )
+                },
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White,
+                    containerColor = Color(0x80000000)
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = skipButtonPadding, bottom = skipButtonBottom)
             ) {
                 Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -913,18 +1125,23 @@ fun PlayerScreen(
             }
         }
 
-        // ── Skip Outro button ──
         if (showSkipOutro) {
             OutlinedButton(
-                onClick = { streamData?.outro?.let { playerState.value?.seekTo(it.end) } },
+                onClick = { 
+                    streamData?.outro?.let { playerState.value?.seekTo(it.end) }
+                    resetControlsTimer()
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 80.dp),
+                    .padding(end = skipButtonPadding, bottom = skipButtonBottom),
                 border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                     brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
                 ),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White,
+                    containerColor = Color(0x80000000)
+                )
             ) {
                 Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -955,9 +1172,15 @@ fun PlayerScreen(
         // ── Settings panel ──
         if (showSettings) {
             SettingsPanel(
-                hasSubtitles     = (streamData?.subtitles?.isNotEmpty()) == true,
+                hasSubtitles     = availableSubtitleLanguages.isNotEmpty() || (streamData?.subtitles?.isNotEmpty() == true),
                 subtitlesEnabled = subtitlesEnabled,
-                onSubtitlesToggle = { subtitlesEnabled = it },
+                onSubtitlesToggle = { enabled ->
+                    subtitlesEnabled = enabled
+                    if (enabled && availableSubtitleLanguages.isNotEmpty()) {
+                        selectedSubtitleLang = availableSubtitleLanguages.firstOrNull { it.startsWith("en") } 
+                            ?: availableSubtitleLanguages.first()
+                    }
+                },
                 currentSpeed     = currentSpeed,
                 onSpeedChange    = { speed ->
                     currentSpeed = speed
