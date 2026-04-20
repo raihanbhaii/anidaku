@@ -34,8 +34,7 @@ import com.anilite.data.*
 import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+// Removed pull-to-refresh imports to fix build failure
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -47,8 +46,6 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     var errorMsg by remember { mutableStateOf("") }
     var isRefreshing by remember { mutableStateOf(false) }
     var loadTrigger by remember { mutableStateOf(0) }
-
-    val pullToRefreshState = rememberPullToRefreshState()
 
     LaunchedEffect(loadTrigger) {
         if (loadTrigger == 0 && HomeCache.isCacheValid()) {
@@ -83,12 +80,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
         return
     }
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = { loadTrigger++ },
-        state = pullToRefreshState,
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -215,6 +207,17 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             }
 
             Spacer(Modifier.height(80.dp))
+        }
+
+        if (isRefreshing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                CircularProgressIndicator(color = Purple40, modifier = Modifier.size(32.dp))
+            }
         }
     }
 }

@@ -31,7 +31,6 @@ import com.anilite.ui.theme.Purple40
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(onAnimeClick: (String) -> Unit) {   // Receives Aniwatch ID as String
     var searchQuery by remember { mutableStateOf("") }
@@ -163,7 +162,7 @@ fun SearchScreen(onAnimeClick: (String) -> Unit) {   // Receives Aniwatch ID as 
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 4.dp)
                             )
-                            anime.episodes?.eps?.let { eps ->
+                            anime.episodes?.epsInt?.let { eps ->
                                 if (eps > 0) {
                                     Text(
                                         text = "$eps episodes",
