@@ -154,7 +154,9 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 }.getInputStream().bufferedReader().readText()
             }
 
-            val json = JSONObject(response)
+            val rootJson = JSONObject(response)
+            val json = rootJson.optJSONObject("results") ?: rootJson
+            
             val streamingArray = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
 
             if (streamingArray != null && streamingArray.length() > 0) {
@@ -215,7 +217,9 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 }.getInputStream().bufferedReader().readText()
             }
 
-            val json = JSONObject(response)
+            val rootJson = JSONObject(response)
+            val json = rootJson.optJSONObject("results") ?: rootJson
+            
             val streamingArray = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
 
             if (streamingArray != null && streamingArray.length() > 0) {
