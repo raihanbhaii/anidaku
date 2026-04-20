@@ -192,7 +192,6 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                 Log.w("PlayerActivity", "[$base][$server] failed: ${e.message}")
             }
         }
-    }
     throw Exception("All servers failed. Please try again later.")
 }
 
