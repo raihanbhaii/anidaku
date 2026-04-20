@@ -13,6 +13,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -257,6 +259,7 @@ fun SettingsPanel(
                     .background(panelBg)
                     .clickable(indication = null,
                         interactionSource = remember { MutableInteractionSource() }) {}
+                    .verticalScroll(rememberScrollState())
                     .padding(bottom = 32.dp)
             ) {
                 // Header
@@ -486,15 +489,16 @@ fun PlayerScreen(
             .setUri(data.m3u8Url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
 
-        data.subtitles.firstOrNull()?.let { sub ->
-            itemBuilder.setSubtitleConfigurations(listOf(
+        if (data.subtitles.isNotEmpty()) {
+            val configs = data.subtitles.map { sub ->
                 SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
                     .setMimeType(MimeTypes.TEXT_VTT)
                     .setLanguage("en")
                     .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                     .setLabel(sub.label)
                     .build()
-            ))
+            }
+            itemBuilder.setSubtitleConfigurations(configs)
         }
 
         val source = HlsMediaSource.Factory(factory).createMediaSource(itemBuilder.build())
