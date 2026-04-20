@@ -495,7 +495,7 @@ fun PlayerScreen(
     var showSettings by remember { mutableStateOf(false) }
     var isSeeking by remember { mutableStateOf(false) }
     var seekDragPosition by remember { mutableStateOf(0L) }
-    var tracksReady by remember { mutableStateOf(false) }
+    val tracksReady = remember { mutableStateOf(false) }
     var availableSubtitleLanguages by remember { mutableStateOf(setOf<String>()) }
     var selectedSubtitleLang by remember { mutableStateOf("en") }
     var lastInteractionTime by remember { mutableStateOf(0L) }
