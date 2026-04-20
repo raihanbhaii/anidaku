@@ -132,30 +132,32 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         else -> episodeId
     }
 
-    // Try the official AniApiService first
-    Log.d("PlayerActivity", "Attempting to fetch from AniApiService with episodeId: $episodeId")
-    try {
-        val sourcesResponse = AniApiService.getSources(episodeId, "vidstreaming", category)
-        
-        if (sourcesResponse.sources.isNotEmpty()) {
-            val m3u8 = sourcesResponse.sources.firstOrNull()?.url ?: ""
-            if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
-                Log.d("PlayerActivity", "✅ SUCCESS with AniApiService")
-                
-                // Convert subtitles
-                val subtitles = sourcesResponse.subtitles.map { sub ->
-                    SubtitleTrack(
-                        url = sub.url,
-                        label = sub.lang.takeIf { it.isNotBlank() } ?: "English",
-                        kind = "subtitles"
-                    )
+    // Try multiple servers from AniApiService
+    val apiServers = listOf("vidstreaming", "vidcloud", "megacloud", "streamsb")
+    val idVariants = listOf(episodeId, cleanId)
+    for (idToTry in idVariants) {
+        for (server in apiServers) {
+            Log.d("PlayerActivity", "Attempting AniApiService with id: $idToTry, server: $server, category: $category")
+            try {
+                val sourcesResponse = AniApiService.getSources(idToTry, server, category)
+                if (sourcesResponse.sources.isNotEmpty()) {
+                    val m3u8 = sourcesResponse.sources.firstOrNull()?.url ?: ""
+                    if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
+                        Log.d("PlayerActivity", "✅ SUCCESS with AniApiService server: $server")
+                        val subtitles = sourcesResponse.subtitles.map { sub ->
+                            SubtitleTrack(
+                                url = sub.url,
+                                label = sub.lang.takeIf { it.isNotBlank() } ?: "English",
+                                kind = "subtitles"
+                            )
+                        }
+                        return StreamData(m3u8, subtitles, null, null)
+                    }
                 }
-                
-                return StreamData(m3u8, subtitles, null, null)
+            } catch (e: Exception) {
+                Log.w("PlayerActivity", "AniApiService server $server failed for ID $idToTry: ${e.message}")
             }
         }
-    } catch (e: Exception) {
-        Log.w("PlayerActivity", "AniApiService failed: ${e.message}")
     }
 
     // Fallback to the original byanime-iota endpoint
