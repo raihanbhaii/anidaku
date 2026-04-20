@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -439,8 +440,10 @@ fun PlayerScreen(
     val tracksReady     = remember { mutableStateOf(false) }
 
     // ── ExoPlayer instance ──
-    // FIX: Use a separate state so AndroidView.update can react to it
     val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
+
+    // ── Hoist density into composable scope (FIX) ──
+    val density = LocalDensity.current.density
 
     val aspectModes = remember {
         listOf(
@@ -469,7 +472,6 @@ fun PlayerScreen(
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
 
-        // Release previous player
         playerState.value?.release()
         playerState.value = null
         tracksReady.value = false
@@ -518,7 +520,6 @@ fun PlayerScreen(
             })
         }
 
-        // FIX: Assign to state so AndroidView.update picks it up
         playerState.value = player
     }
 
@@ -570,19 +571,17 @@ fun PlayerScreen(
     // ── UI ──
     Box(Modifier.fillMaxSize().background(Color.Black)) {
 
-        // ── PlayerView (ALWAYS rendered; player assigned in update) ──
+        // ── PlayerView ──
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     useController  = false
                     keepScreenOn   = true
                     resizeMode     = aspectModes[aspectRatioMode]
-                    // Do NOT set player here – it's null. Set it in update.
                 }
             },
             modifier = Modifier.fillMaxSize(),
             update = { view ->
-                // FIX: Set player here so it updates whenever playerState changes
                 view.player     = playerState.value
                 view.resizeMode = aspectModes[aspectRatioMode]
             }
@@ -615,9 +614,7 @@ fun PlayerScreen(
                     Text(errorMsg, color = Color(0xFF888888), fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
                     Button(
-                        onClick = { /* trigger retry by re-launching the effect */
-                            (context as? Activity)?.finish()
-                        },
+                        onClick = { (context as? Activity)?.finish() },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -630,14 +627,14 @@ fun PlayerScreen(
             return@Box
         }
 
-        // ── Buffering spinner (above video) ──
+        // ── Buffering spinner ──
         if (isBuffering) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color(0xFF9B59F5), strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
             }
         }
 
-        // ── Double-tap zones when controls visible ──
+        // ── Double-tap zones ──
         if (!isLocked) {
             Row(Modifier.fillMaxSize()) {
                 Box(
@@ -697,13 +694,11 @@ fun PlayerScreen(
                         )
                         Text("Episode $episodeNumber", color = Color(0xFFAAAAAA), fontSize = 12.sp)
                     }
-                    // Settings button (hidden when locked)
                     if (!isLocked) {
                         IconButton(onClick = { showSettings = !showSettings }) {
                             Icon(Icons.Default.Settings, null, tint = Color.White)
                         }
                     }
-                    // Lock toggle
                     IconButton(onClick = { isLocked = !isLocked }) {
                         Icon(
                             if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
@@ -713,7 +708,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // ── Center controls (hidden when locked) ──
+                // ── Center controls ──
                 if (!isLocked) {
                     Row(
                         Modifier
@@ -723,7 +718,6 @@ fun PlayerScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Rewind 10s
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
                                 onClick = { seekBy(-10_000L) },
@@ -738,7 +732,6 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Play/Pause
                         Box(
                             Modifier
                                 .size(64.dp)
@@ -757,7 +750,6 @@ fun PlayerScreen(
                             )
                         }
 
-                        // Forward 10s
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
                                 onClick = { seekBy(+10_000L) },
@@ -774,7 +766,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // ── Bottom bar (hidden when locked) ──
+                // ── Bottom bar ──
                 if (!isLocked) {
                     Column(
                         Modifier
@@ -784,7 +776,6 @@ fun PlayerScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                             .navigationBarsPadding()
                     ) {
-                        // Seek bar
                         val progress = if (isSeeking)
                             (seekDragPosition.toFloat() / totalDuration).coerceIn(0f, 1f)
                         else
@@ -836,7 +827,7 @@ fun PlayerScreen(
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(Color(0xFF9B59F5))
                             )
-                            // Thumb
+                            // Thumb — FIX: use hoisted `density` from composable scope
                             Box(
                                 Modifier
                                     .align(Alignment.CenterStart)
