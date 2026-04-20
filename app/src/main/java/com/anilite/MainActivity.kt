@@ -31,24 +31,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-
-        // Check for update in background before showing UI
-        Thread {
-            val update = UpdateChecker.check(this)
-            runOnUiThread {
-                if (update.hasUpdate) {
-                    startActivity(
-                        Intent(this, UpdateActivity::class.java).apply {
-                            putExtra("apk_url", update.apkUrl)
-                            putExtra("latest_version", update.latestVersion)
-                        }
-                    )
-                    finish()
-                } else {
-                    showApp()
-                }
-            }
-        }.start()
+        showApp()
     }
 
     private fun showApp() {
