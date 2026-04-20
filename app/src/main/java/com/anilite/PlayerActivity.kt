@@ -131,19 +131,15 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     val cleanId  = episodeId.substringBefore("?ep=").substringBefore("?")
     val epParam  = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
     val servers  = listOf("HD-1", "HD-2", "HD-3")
-    val endpoints = listOf(
-        "https://byanime-iota.vercel.app/api/stream",
-        "https://byanime-iota.vercel.app/api/stream/fallback"
-    )
+    val base = "https://byanime-iota.vercel.app/api/stream"
 
-    for (base in endpoints) {
-        for (server in servers) {
-            try {
-                val url = buildString {
-                    append("$base?id=${if (epParam.isNotEmpty()) cleanId else episodeId}")
-                    append("&server=$server&type=$category")
-                    if (epParam.isNotEmpty()) append("&ep=$epParam")
-                }
+    for (server in servers) {
+        try {
+            val url = buildString {
+                append("$base?id=${if (epParam.isNotEmpty()) cleanId else episodeId}")
+                append("&server=$server&type=$category")
+                if (epParam.isNotEmpty()) append("&ep=$epParam")
+            }
                 Log.d("PlayerActivity", "Trying: $url")
 
                 val response = withContext(Dispatchers.IO) {
@@ -163,17 +159,19 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
                     val m3u8  = first.optString("link").ifBlank { first.optString("file") }
 
                     if (m3u8.startsWith("http")) {
-                        Log.d("PlayerActivity", "✅ Stream found: $server @ $base")
+                        Log.d("PlayerActivity", "✅ Stream found: $server")
 
                         val subtitles = mutableListOf<SubtitleTrack>()
-                        json.optJSONArray("tracks")?.let { arr ->
+                        // Check both "tracks" and "subtitles" fields
+                        val tracksArr = json.optJSONArray("tracks") ?: json.optJSONArray("subtitles")
+                        tracksArr?.let { arr ->
                             for (i in 0 until arr.length()) {
                                 val t = arr.getJSONObject(i)
-                                val file = t.optString("file")
+                                val file = t.optString("file").ifBlank { t.optString("url") }
                                 if (file.isNotBlank()) {
                                     subtitles += SubtitleTrack(
                                         url   = file,
-                                        label = t.optString("label", "English"),
+                                        label = t.optString("label").ifBlank { t.optString("lang", "English") },
                                         kind  = t.optString("kind",  "subtitles")
                                     )
                                 }
