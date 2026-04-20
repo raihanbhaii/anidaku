@@ -55,6 +55,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.anilite.data.AniApiService
 import com.anilite.ui.theme.AnidakuTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -130,12 +131,38 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         else -> episodeId
     }
 
+    // Try the official AniApiService first
+    Log.d("PlayerActivity", "Attempting to fetch from AniApiService with episodeId: $episodeId")
+    try {
+        val sourcesResponse = AniApiService.getSources(episodeId, "vidstreaming", category)
+        
+        if (sourcesResponse.sources.isNotEmpty()) {
+            val m3u8 = sourcesResponse.sources.firstOrNull()?.url ?: ""
+            if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
+                Log.d("PlayerActivity", "✅ SUCCESS with AniApiService")
+                
+                // Convert subtitles
+                val subtitles = sourcesResponse.subtitles.map { sub ->
+                    SubtitleTrack(
+                        url = sub.url,
+                        label = sub.lang.takeIf { it.isNotBlank() } ?: "English",
+                        kind = "subtitles"
+                    )
+                }
+                
+                return StreamData(m3u8, subtitles, null, null)
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("PlayerActivity", "AniApiService failed: ${e.message}")
+    }
+
+    // Fallback to the original byanime-iota endpoint
     val serverPriority = listOf("HD-1", "HD-2", "HD-3", "1", "2", "3")
 
-    // Try Primary Endpoint
     for (server in serverPriority) {
         try {
-            val url = "https://byanime-iota.vercel.app/api/stream?id=$cleanId&server=$server&type=$category"
+            val url = "https://byanime-iota.vercel.app/api/stream?id=$episodeId&server=$server&type=$category"
             Log.d("PlayerActivity", "Trying: $url")
 
             val response = withContext(Dispatchers.IO) {
@@ -193,7 +220,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     Log.d("PlayerActivity", "Trying fallback endpoint...")
     for (server in serverPriority) {
         try {
-            val url = "https://byanime-iota.vercel.app/api/stream/fallback?id=$cleanId&server=$server&type=$category"
+            val url = "https://byanime-iota.vercel.app/api/stream/fallback?id=$episodeId&server=$server&type=$category"
             Log.d("PlayerActivity", "Fallback: $url")
 
             val response = withContext(Dispatchers.IO) {
@@ -262,103 +289,105 @@ fun SettingsPanel(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0x88000000))
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() }
-    )
-
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
-        Column(
-            modifier = Modifier
-                .width(290.dp)
-                .fillMaxHeight()
-                .background(panelBg)
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
-                .padding(top = 16.dp, bottom = 32.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, null, tint = Color.White)
-                }
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
+                onDismiss()
             }
-            HorizontalDivider(color = divider)
-
-            Spacer(Modifier.height(16.dp))
-
-            // Subtitles
-            Text("SUBTITLES", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp))
-            Spacer(Modifier.height(8.dp))
-            if (hasSubtitles) {
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            Column(
+                modifier = Modifier
+                    .width(290.dp)
+                    .fillMaxHeight()
+                    .background(panelBg)
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                    .padding(top = 16.dp, bottom = 32.dp)
+            ) {
+                // Header
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.ClosedCaption, null, tint = if (subtitlesEnabled) accent else Color.Gray, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("English Subtitles", color = Color.White, fontSize = 16.sp)
+                    Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, null, tint = Color.White)
                     }
-                    Switch(checked = subtitlesEnabled, onCheckedChange = onSubtitlesToggle, colors = SwitchDefaults.colors(checkedTrackColor = accent))
                 }
-            } else {
-                Text("No subtitles available", color = Color.Gray, modifier = Modifier.padding(horizontal = 18.dp))
-            }
+                HorizontalDivider(color = divider)
 
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider(color = divider)
+                Spacer(Modifier.height(16.dp))
 
-            // Playback Speed
-            Text("PLAYBACK SPEED", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
-            speedOptions.chunked(4).forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    row.forEach { speed ->
-                        val isActive = speed == currentSpeed
-                        Box(
-                            modifier = Modifier.weight(1f).height(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isActive) accent else chipBg)
-                                .clickable { onSpeedChange(speed) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                if (speed == 1f) "Normal" else "${speed}x",
-                                color = if (isActive) Color.White else Color.LightGray,
-                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
-                            )
+                // Subtitles
+                Text("SUBTITLES", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp))
+                Spacer(Modifier.height(8.dp))
+                if (hasSubtitles) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ClosedCaption, null, tint = if (subtitlesEnabled) accent else Color.Gray, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("English Subtitles", color = Color.White, fontSize = 16.sp)
+                        }
+                        Switch(checked = subtitlesEnabled, onCheckedChange = onSubtitlesToggle, colors = SwitchDefaults.colors(checkedTrackColor = accent))
+                    }
+                } else {
+                    Text("No subtitles available", color = Color.Gray, modifier = Modifier.padding(horizontal = 18.dp))
+                }
+
+                Spacer(Modifier.height(24.dp))
+                HorizontalDivider(color = divider)
+
+                // Playback Speed
+                Text("PLAYBACK SPEED", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+                speedOptions.chunked(4).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        row.forEach { speed ->
+                            val isActive = speed == currentSpeed
+                            Box(
+                                modifier = Modifier.weight(1f).height(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isActive) accent else chipBg)
+                                    .clickable { onSpeedChange(speed) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    if (speed == 1f) "Normal" else "${speed}x",
+                                    color = if (isActive) Color.White else Color.LightGray,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = divider)
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = divider)
 
-            // Aspect Ratio
-            Text("ASPECT RATIO", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                aspectLabels.forEachIndexed { index, label ->
-                    val active = index == aspectRatioMode
-                    Column(
-                        modifier = Modifier.weight(1f).height(60.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (active) accent else chipBg)
-                            .clickable { onAspectChange(index) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(aspectIcons[index], null, tint = if (active) Color.White else Color.Gray, modifier = Modifier.size(20.dp))
-                        Text(label, color = if (active) Color.White else Color.LightGray, fontSize = 12.sp)
+                // Aspect Ratio
+                Text("ASPECT RATIO", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    aspectLabels.forEachIndexed { index, label ->
+                        val active = index == aspectRatioMode
+                        Column(
+                            modifier = Modifier.weight(1f).height(60.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) accent else chipBg)
+                                .clickable { onAspectChange(index) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(aspectIcons[index], null, tint = if (active) Color.White else Color.Gray, modifier = Modifier.size(20.dp))
+                            Text(label, color = if (active) Color.White else Color.LightGray, fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -538,64 +567,237 @@ fun PlayerScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.ErrorOutline, null, tint = Color.Red, modifier = Modifier.size(60.dp))
-                    Text("Failed to Load", color = Color.Red, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text(errorMsg, color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
-                    Button(onClick = onBack, colors = ButtonDefaults.buttonColors(Color(0xFF9B59F5))) {
-                        Text("Go Back")
-                    }
+                    Text("Failed to Load", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+                    Text(errorMsg, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(16.dp), textAlign = TextAlign.Center)
                 }
             }
             return@Box
         }
 
-        // Video Player
-        streamData?.let { data ->
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        resizeMode = aspectModes[aspectRatioMode]
-                        player = exoPlayer.value
-                    }
-                },
-                update = { it.resizeMode = aspectModes[aspectRatioMode] },
-                modifier = Modifier.fillMaxSize()
-            )
+        // Player View
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer.value
+                    useController = false
+                    resizeMode = aspectModes[aspectRatioMode]
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            update = { view ->
+                view.resizeMode = aspectModes[aspectRatioMode]
+            }
+        )
 
-            // Gesture Layer
+        // Controls Overlay
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(isLocked, showSettings) {
-                        if (!isLocked && !showSettings) {
-                            detectTapGestures(
-                                onDoubleTap = { offset ->
-                                    if (offset.x < size.width / 2) seekBack() else seekForward()
-                                },
-                                onTap = { showControls = !showControls }
-                            )
-                            detectVerticalDragGestures { change, dragAmount ->
-                                change.consume()
-                                val half = size.width / 2
-                                if (change.position.x < half) {
-                                    // Brightness
-                                    brightnessLevel = (brightnessLevel - dragAmount / size.height).coerceIn(0f, 1f)
-                                    showBrightnessHud = true
-                                } else {
-                                    // Volume
-                                    volumeLevel = (volumeLevel - dragAmount / size.height * maxVolume).coerceIn(0f, maxVolume)
-                                    showVolumeHud = true
-                                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volumeLevel.toInt(), 0)
-                                }
-                            }
+                    .background(Color(0x44000000))
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            showControls = !showControls
                         }
                     }
+            ) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF000000), Color(0x00000000)),
+                                endY = 120f
+                            )
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(episodeTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("Episode $episodeNumber", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    IconButton(onClick = { showSettings = !showSettings }) {
+                        Icon(Icons.Default.Settings, null, tint = Color.White)
+                    }
+                }
+
+                // Center Controls
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { seekBack() }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.FastRewind, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            exoPlayer.value?.playWhenReady = !isPlaying
+                        },
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF9B59F5))
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            null,
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    IconButton(onClick = { seekForward() }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.FastForward, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                }
+
+                // Bottom Bar
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0x00000000), Color(0xFF000000)),
+                                startY = 80f
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    // Progress Bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .background(Color(0x44FFFFFF), RoundedCornerShape(2.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures { offset ->
+                                    val progress = (offset.x / size.width).coerceIn(0f, 1f)
+                                    exoPlayer.value?.seekTo((progress * totalDuration).toLong())
+                                }
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fraction = (currentPosition.toFloat() / totalDuration).coerceIn(0f, 1f))
+                                .background(Color(0xFF9B59F5), RoundedCornerShape(2.dp))
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Time Info
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatTime(currentPosition), color = Color.White, fontSize = 12.sp)
+                        Text(formatTime(totalDuration), color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
+
+                // Lock Button
+                IconButton(
+                    onClick = { isLocked = !isLocked },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                        null,
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+
+        // Skip Intro Button
+        if (showSkipIntro) {
+            Button(
+                onClick = {
+                    streamData?.intro?.let { exoPlayer.value?.seekTo(it.end) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(32.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))
+            ) {
+                Text("Skip Intro")
+            }
+        }
+
+        // Skip Outro Button
+        if (showSkipOutro) {
+            Button(
+                onClick = {
+                    streamData?.outro?.let { exoPlayer.value?.seekTo(it.end) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(32.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))
+            ) {
+                Text("Skip Outro")
+            }
+        }
+
+        // Settings Panel
+        if (showSettings) {
+            SettingsPanel(
+                hasSubtitles = streamData?.subtitles?.isNotEmpty() ?: false,
+                subtitlesEnabled = subtitlesEnabled,
+                onSubtitlesToggle = { subtitlesEnabled = it },
+                currentSpeed = currentSpeed,
+                onSpeedChange = { speed ->
+                    currentSpeed = speed
+                    exoPlayer.value?.setPlaybackParameters(PlaybackParameters(speed))
+                },
+                aspectRatioMode = aspectRatioMode,
+                onAspectChange = { aspectRatioMode = it },
+                onDismiss = { showSettings = false }
             )
+        }
 
-            // All UI overlays (controls, skip buttons, settings, huds) remain same as your original code...
-            // (For brevity I kept the structure same, you can copy the rest from your previous code)
+        // Seek Feedback
+        if (seekFeedback.isNotEmpty()) {
+            LaunchedEffect(seekFeedback) {
+                delay(500)
+                seekFeedback = ""
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color(0x88000000), RoundedCornerShape(8.dp))
+                    .padding(16.dp)
+            ) {
+                Text(seekFeedback, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+        }
 
-            // ... [Rest of your UI code (Top bar, Center controls, Bottom bar, Skip buttons, Settings panel, HUDs) stays exactly the same as in your original message]
+        // Buffering Indicator
+        if (isBuffering) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(50.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color(0xFF9B59F5), modifier = Modifier.size(40.dp))
+            }
         }
     }
 }
