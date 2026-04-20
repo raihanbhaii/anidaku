@@ -51,6 +51,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -209,10 +210,31 @@ fun formatTime(ms: Long): String {
 
 @OptIn(UnstableApi::class)
 fun applySubtitleState(player: ExoPlayer, enabled: Boolean) {
-    player.trackSelectionParameters = player.trackSelectionParameters
-        .buildUpon()
-        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
-        .build()
+    if (!enabled) {
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    } else {
+        // Enable text tracks and try to select the first available one
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguage("en")
+            .build()
+            
+        // Force selection of the first text track if available
+        val tracks = player.currentTracks
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_TEXT) {
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+                    .build()
+                break
+            }
+        }
+    }
 }
 
 // ==================== SETTINGS PANEL ====================
@@ -492,8 +514,13 @@ fun PlayerScreen(
 
         if (data.subtitles.isNotEmpty()) {
             val configs = data.subtitles.map { sub ->
+                val mimeType = when {
+                    sub.url.endsWith(".vtt", true) -> MimeTypes.TEXT_VTT
+                    sub.url.endsWith(".srt", true) -> MimeTypes.APPLICATION_SUBRIP
+                    else -> MimeTypes.TEXT_VTT // Default to VTT
+                }
                 SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
-                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setMimeType(mimeType)
                     .setLanguage("en")
                     .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                     .setLabel(sub.label)
