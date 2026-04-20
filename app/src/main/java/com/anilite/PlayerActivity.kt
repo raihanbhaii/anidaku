@@ -3,9 +3,7 @@ package com.anilite
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
-import android.media.AudioManager
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -15,8 +13,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -31,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +53,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.anilite.data.AniApiService
 import com.anilite.ui.theme.AnidakuTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -91,24 +87,24 @@ class PlayerActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
-        val episodeId = intent.getStringExtra("episodeId") ?: ""
-        val category = intent.getStringExtra("category") ?: "sub"
+        val episodeId    = intent.getStringExtra("episodeId")    ?: ""
+        val category     = intent.getStringExtra("category")     ?: "sub"
         val episodeTitle = intent.getStringExtra("episodeTitle") ?: ""
-        val episodeNumber = intent.getIntExtra("episodeNumber", 0)
+        val episodeNumber = intent.getIntExtra("episodeNumber",   0)
 
         setContent {
             AnidakuTheme {
                 PlayerScreen(
-                    episodeId = episodeId,
-                    category = category,
-                    episodeTitle = episodeTitle,
+                    episodeId     = episodeId,
+                    category      = category,
+                    episodeTitle  = episodeTitle,
                     episodeNumber = episodeNumber,
-                    onBack = { finish() }
+                    onBack        = { finish() }
                 )
             }
         }
@@ -117,131 +113,91 @@ class PlayerActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            val controller = WindowInsetsControllerCompat(window, window.decorView)
-            controller.hide(WindowInsetsCompat.Type.systemBars())
+            WindowInsetsControllerCompat(window, window.decorView)
+                .hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 }
 
-// ==================== UPDATED FETCH FUNCTION (BYANIME ONLY) ====================
+// ==================== STREAM FETCHER ====================
 @OptIn(UnstableApi::class)
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
-    val cleanId = when {
-        episodeId.contains("?ep=") -> episodeId.substringBefore("?ep=")
-        episodeId.contains("?") -> episodeId.substringBefore("?")
-        else -> episodeId
-    }
-    val epParam = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
+    val cleanId  = episodeId.substringBefore("?ep=").substringBefore("?")
+    val epParam  = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
+    val servers  = listOf("HD-1", "HD-2", "HD-3")
+    val endpoints = listOf(
+        "https://byanime-iota.vercel.app/api/stream",
+        "https://byanime-iota.vercel.app/api/stream/fallback"
+    )
 
-    // Try primary byanime-iota API with multiple servers
-    val primaryServers = listOf("HD-1", "HD-2", "HD-3")
-    for (server in primaryServers) {
-        try {
-            val baseUrl = "https://byanime-iota.vercel.app/api/stream"
-            val url = if (epParam.isNotEmpty()) {
-                "$baseUrl?id=$cleanId&server=$server&type=$category&ep=$epParam"
-            } else {
-                "$baseUrl?id=$episodeId&server=$server&type=$category"
-            }
-            
-            Log.d("PlayerActivity", "Trying Primary API: $url")
+    for (base in endpoints) {
+        for (server in servers) {
+            try {
+                val url = buildString {
+                    append("$base?id=${if (epParam.isNotEmpty()) cleanId else episodeId}")
+                    append("&server=$server&type=$category")
+                    if (epParam.isNotEmpty()) append("&ep=$epParam")
+                }
+                Log.d("PlayerActivity", "Trying: $url")
 
-            val response = withContext(Dispatchers.IO) {
-                URL(url).openConnection().apply {
-                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                    connectTimeout = 15000
-                    readTimeout = 15000
-                }.getInputStream().bufferedReader().readText()
-            }
+                val response = withContext(Dispatchers.IO) {
+                    URL(url).openConnection().apply {
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        connectTimeout = 15_000
+                        readTimeout    = 15_000
+                    }.getInputStream().bufferedReader().readText()
+                }
 
-            val rootJson = JSONObject(response)
-            val json = rootJson.optJSONObject("results") ?: rootJson
-            
-            val streamingArray = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
+                val root = JSONObject(response)
+                val json = root.optJSONObject("results") ?: root
+                val sources = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
 
-            if (streamingArray != null && streamingArray.length() > 0) {
-                val firstLink = streamingArray.getJSONObject(0)
-                val m3u8 = firstLink.optString("link") ?: firstLink.optString("file", "")
+                if (sources != null && sources.length() > 0) {
+                    val first = sources.getJSONObject(0)
+                    val m3u8  = first.optString("link").ifBlank { first.optString("file") }
 
-                if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
-                    Log.d("PlayerActivity", "✅ SUCCESS with server $server")
+                    if (m3u8.startsWith("http")) {
+                        Log.d("PlayerActivity", "✅ Stream found: $server @ $base")
 
-                    val subtitles = mutableListOf<SubtitleTrack>()
-                    json.optJSONArray("tracks")?.let { array ->
-                        for (i in 0 until array.length()) {
-                            val track = array.getJSONObject(i)
-                            val file = track.optString("file")
-                            if (file.isNotBlank()) {
-                                subtitles.add(
-                                    SubtitleTrack(
-                                        url = file,
-                                        label = track.optString("label", "English"),
-                                        kind = track.optString("kind", "subtitles")
+                        val subtitles = mutableListOf<SubtitleTrack>()
+                        json.optJSONArray("tracks")?.let { arr ->
+                            for (i in 0 until arr.length()) {
+                                val t = arr.getJSONObject(i)
+                                val file = t.optString("file")
+                                if (file.isNotBlank()) {
+                                    subtitles += SubtitleTrack(
+                                        url   = file,
+                                        label = t.optString("label", "English"),
+                                        kind  = t.optString("kind",  "subtitles")
                                     )
-                                )
+                                }
                             }
                         }
-                    }
 
-                    val intro = json.optJSONObject("intro")?.let {
-                        SkipSegment(it.optLong("start", 0) * 1000L, it.optLong("end", 0) * 1000L)
-                    }
-                    val outro = json.optJSONObject("outro")?.let {
-                        SkipSegment(it.optLong("start", 0) * 1000L, it.optLong("end", 0) * 1000L)
-                    }
+                        val intro = json.optJSONObject("intro")?.let {
+                            SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
+                        }
+                        val outro = json.optJSONObject("outro")?.let {
+                            SkipSegment(it.optLong("start") * 1000L, it.optLong("end") * 1000L)
+                        }
 
-                    return StreamData(m3u8, subtitles, intro, outro)
+                        return StreamData(m3u8, subtitles, intro, outro)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.w("PlayerActivity", "[$base][$server] failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w("PlayerActivity", "Primary server $server failed: ${e.message}")
         }
     }
-
-    // Try Fallback byanime-iota API
-    for (server in primaryServers) {
-        try {
-            val baseUrl = "https://byanime-iota.vercel.app/api/stream/fallback"
-            val url = if (epParam.isNotEmpty()) {
-                "$baseUrl?id=$cleanId&server=$server&type=$category&ep=$epParam"
-            } else {
-                "$baseUrl?id=$episodeId&server=$server&type=$category"
-            }
-            Log.d("PlayerActivity", "Trying Fallback API: $url")
-
-            val response = withContext(Dispatchers.IO) {
-                URL(url).openConnection().apply {
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                    connectTimeout = 10000
-                    readTimeout = 10000
-                }.getInputStream().bufferedReader().readText()
-            }
-
-            val rootJson = JSONObject(response)
-            val json = rootJson.optJSONObject("results") ?: rootJson
-            
-            val streamingArray = json.optJSONArray("streamingLink") ?: json.optJSONArray("sources")
-
-            if (streamingArray != null && streamingArray.length() > 0) {
-                val m3u8 = streamingArray.getJSONObject(0).optString("link")
-                if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
-                    Log.d("PlayerActivity", "✅ SUCCESS with fallback server $server")
-                    return StreamData(m3u8, emptyList(), null, null)
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("PlayerActivity", "Fallback server $server failed: ${e.message}")
-        }
-    }
-
-    throw Exception("ByAnime servers failed to load stream. Please try another episode.")
+    throw Exception("All servers failed. Please try again later.")
 }
 
 // ==================== HELPERS ====================
 fun formatTime(ms: Long): String {
-    val s = ms / 1000
-    val h = s / 3600
-    val m = (s % 3600) / 60
+    if (ms <= 0L) return "00:00"
+    val s   = ms / 1000
+    val h   = s / 3600
+    val m   = (s % 3600) / 60
     val sec = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
 }
@@ -266,113 +222,169 @@ fun SettingsPanel(
     onAspectChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val accent = Color(0xFF9B59F5)
-    val panelBg = Color(0xF01A1A2E)
-    val divider = Color(0x22FFFFFF)
-    val chipBg = Color(0x22FFFFFF)
+    val accent  = Color(0xFF9B59F5)
+    val panelBg = Color(0xF0111122)
+    val divider = Color(0x1FFFFFFF)
+    val chipBg  = Color(0x18FFFFFF)
 
-    val speedOptions = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
-    val aspectLabels = listOf("Fit", "Fill", "Zoom")
-    val aspectIcons = listOf(Icons.Default.FitScreen, Icons.Default.Fullscreen, Icons.Default.ZoomOutMap)
+    val speedOptions  = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+    val aspectLabels  = listOf("Fit", "Fill", "Zoom")
+    val aspectIcons   = listOf(
+        Icons.Default.FitScreen,
+        Icons.Default.Fullscreen,
+        Icons.Default.ZoomOutMap
+    )
 
     Box(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
-            .background(Color(0x88000000))
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-                onDismiss()
-            }
+            .background(Color(0x66000000))
+            .clickable(indication = null,
+                interactionSource = remember { MutableInteractionSource() }) { onDismiss() }
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit  = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
             Column(
                 modifier = Modifier
-                    .width(290.dp)
+                    .width(300.dp)
                     .fillMaxHeight()
                     .background(panelBg)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
-                    .padding(top = 16.dp, bottom = 32.dp)
+                    .clickable(indication = null,
+                        interactionSource = remember { MutableInteractionSource() }) {}
+                    .padding(bottom = 32.dp)
             ) {
+                // Header
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = Color.White)
+                        Icon(Icons.Default.Close, null, tint = Color(0xFFAAAAAA))
                     }
                 }
-                HorizontalDivider(color = divider)
+                HorizontalDivider(color = divider, thickness = 0.5.dp)
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
 
-                Text("SUBTITLES", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp))
-                Spacer(Modifier.height(8.dp))
+                // ── Subtitles ──
+                SectionLabel("SUBTITLES", accent)
+                Spacer(Modifier.height(10.dp))
                 if (hasSubtitles) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ClosedCaption, null, tint = if (subtitlesEnabled) accent else Color.Gray, modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.ClosedCaption, null,
+                                tint = if (subtitlesEnabled) accent else Color(0xFF666666),
+                                modifier = Modifier.size(22.dp)
+                            )
                             Spacer(Modifier.width(12.dp))
-                            Text("English Subtitles", color = Color.White, fontSize = 16.sp)
+                            Text("English Subtitles", color = Color.White, fontSize = 15.sp)
                         }
-                        Switch(checked = subtitlesEnabled, onCheckedChange = onSubtitlesToggle, colors = SwitchDefaults.colors(checkedTrackColor = accent))
+                        Switch(
+                            checked = subtitlesEnabled,
+                            onCheckedChange = onSubtitlesToggle,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor   = accent,
+                                uncheckedTrackColor = Color(0xFF333344)
+                            )
+                        )
                     }
                 } else {
-                    Text("No subtitles available", color = Color.Gray, modifier = Modifier.padding(horizontal = 18.dp))
+                    Text(
+                        "No subtitles available",
+                        color = Color(0xFF666666),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
                 }
 
                 Spacer(Modifier.height(24.dp))
-                HorizontalDivider(color = divider)
+                HorizontalDivider(color = divider, thickness = 0.5.dp)
+                Spacer(Modifier.height(20.dp))
 
-                Text("PLAYBACK SPEED", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+                // ── Speed ──
+                SectionLabel("PLAYBACK SPEED", accent)
+                Spacer(Modifier.height(12.dp))
                 speedOptions.chunked(4).forEach { row ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         row.forEach { speed ->
-                            val isActive = speed == currentSpeed
+                            val active = speed == currentSpeed
                             Box(
-                                modifier = Modifier.weight(1f).height(40.dp)
+                                Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isActive) accent else chipBg)
+                                    .background(if (active) accent else chipBg)
                                     .clickable { onSpeedChange(speed) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    if (speed == 1f) "Normal" else "${speed}x",
-                                    color = if (isActive) Color.White else Color.LightGray,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                                    text = if (speed == 1f) "1x" else "${speed}x",
+                                    color = if (active) Color.White else Color(0xFFAAAAAA),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = divider)
+                Spacer(Modifier.height(24.dp))
+                HorizontalDivider(color = divider, thickness = 0.5.dp)
+                Spacer(Modifier.height(20.dp))
 
-                Text("ASPECT RATIO", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+                // ── Aspect Ratio ──
+                SectionLabel("ASPECT RATIO", accent)
+                Spacer(Modifier.height(12.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     aspectLabels.forEachIndexed { index, label ->
                         val active = index == aspectRatioMode
                         Column(
-                            modifier = Modifier.weight(1f).height(60.dp)
+                            Modifier
+                                .weight(1f)
+                                .height(64.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (active) accent else chipBg)
                                 .clickable { onAspectChange(index) },
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(aspectIcons[index], null, tint = if (active) Color.White else Color.Gray, modifier = Modifier.size(20.dp))
-                            Text(label, color = if (active) Color.White else Color.LightGray, fontSize = 12.sp)
+                            Icon(
+                                aspectIcons[index], null,
+                                tint = if (active) Color.White else Color(0xFF888888),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                label,
+                                color = if (active) Color.White else Color(0xFF888888),
+                                fontSize = 12.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
+                            )
                         }
                     }
                 }
@@ -381,7 +393,19 @@ fun SettingsPanel(
     }
 }
 
-// ==================== MAIN PLAYER SCREEN ====================
+@Composable
+private fun SectionLabel(text: String, color: Color) {
+    Text(
+        text,
+        color = color,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.2.sp,
+        modifier = Modifier.padding(horizontal = 20.dp)
+    )
+}
+
+// ==================== PLAYER SCREEN ====================
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
@@ -392,77 +416,87 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    var streamData by remember { mutableStateOf<StreamData?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var isBuffering by remember { mutableStateOf(false) }
-    var errorMsg by remember { mutableStateOf("") }
-    var showControls by remember { mutableStateOf(true) }
-    var showSkipIntro by remember { mutableStateOf(false) }
-    var showSkipOutro by remember { mutableStateOf(false) }
+    // ── State ──
+    var streamData      by remember { mutableStateOf<StreamData?>(null) }
+    var isLoading       by remember { mutableStateOf(true) }
+    var isBuffering     by remember { mutableStateOf(false) }
+    var errorMsg        by remember { mutableStateOf("") }
+    var showControls    by remember { mutableStateOf(true) }
+    var showSkipIntro   by remember { mutableStateOf(false) }
+    var showSkipOutro   by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
-    var totalDuration by remember { mutableStateOf(1L) }
-    var isPlaying by remember { mutableStateOf(true) }
-    var isLocked by remember { mutableStateOf(false) }
-    var currentSpeed by remember { mutableStateOf(1f) }
-    var seekFeedback by remember { mutableStateOf("") }
+    var totalDuration   by remember { mutableStateOf(1L) }
+    var isPlaying       by remember { mutableStateOf(false) }
+    var isLocked        by remember { mutableStateOf(false) }
+    var currentSpeed    by remember { mutableStateOf(1f) }
+    var seekFeedback    by remember { mutableStateOf("") }
     var aspectRatioMode by remember { mutableStateOf(0) }
     var subtitlesEnabled by remember { mutableStateOf(true) }
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings    by remember { mutableStateOf(false) }
+    var isSeeking       by remember { mutableStateOf(false) }
+    var seekDragPosition by remember { mutableStateOf(0L) }
+    val tracksReady     = remember { mutableStateOf(false) }
 
-    val exoPlayer = remember { mutableStateOf<ExoPlayer?>(null) }
-    val tracksReady = remember { mutableStateOf(false) }
+    // ── ExoPlayer instance ──
+    // FIX: Use a separate state so AndroidView.update can react to it
+    val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
 
-    val aspectModes = listOf(
-        AspectRatioFrameLayout.RESIZE_MODE_FIT,
-        AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-    )
+    val aspectModes = remember {
+        listOf(
+            AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            AspectRatioFrameLayout.RESIZE_MODE_FILL,
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        )
+    }
 
+    // ── Fetch stream ──
     LaunchedEffect(episodeId, category) {
         isLoading = true
-        errorMsg = ""
+        errorMsg  = ""
+        streamData = null
         try {
             streamData = fetchStreamData(episodeId, category)
         } catch (e: Exception) {
-            errorMsg = e.message ?: "Unknown error"
+            errorMsg = e.message ?: "Unknown error occurred"
             Log.e("PlayerActivity", "Stream fetch failed", e)
         } finally {
             isLoading = false
         }
     }
 
-    LaunchedEffect(showControls, isLocked, showSettings) {
-        if (showControls && !isLocked && !showSettings) {
-            delay(3000)
-            showControls = false
-        }
-    }
-
+    // ── Build/replace ExoPlayer when stream data is ready ──
     LaunchedEffect(streamData) {
         val data = streamData ?: return@LaunchedEffect
+
+        // Release previous player
+        playerState.value?.release()
+        playerState.value = null
+        tracksReady.value = false
+
         val factory = DefaultHttpDataSource.Factory().apply {
-            setDefaultRequestProperties(mapOf("User-Agent" to "Mozilla/5.0"))
+            setDefaultRequestProperties(mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"))
         }
 
-        val mediaItemBuilder = MediaItem.Builder()
+        val itemBuilder = MediaItem.Builder()
             .setUri(data.m3u8Url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
 
         data.subtitles.firstOrNull()?.let { sub ->
-            val subtitleConfig = SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
-                .setMimeType(MimeTypes.TEXT_VTT)
-                .setLanguage("en")
-                .setLabel(sub.label)
-                .build()
-            mediaItemBuilder.setSubtitleConfigurations(listOf(subtitleConfig))
+            itemBuilder.setSubtitleConfigurations(listOf(
+                SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage("en")
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .setLabel(sub.label)
+                    .build()
+            ))
         }
 
-        val mediaSource = HlsMediaSource.Factory(factory).createMediaSource(mediaItemBuilder.build())
+        val source = HlsMediaSource.Factory(factory).createMediaSource(itemBuilder.build())
 
         val player = ExoPlayer.Builder(context).build().apply {
-            setMediaSource(mediaSource)
+            setMediaSource(source)
             prepare()
             playWhenReady = true
 
@@ -472,7 +506,8 @@ fun PlayerScreen(
                     applySubtitleState(this@apply, subtitlesEnabled)
                 }
                 override fun onPlayerError(error: PlaybackException) {
-                    errorMsg = "Playback Error: ${error.message}"
+                    errorMsg = "Playback error: ${error.message ?: "Unknown"}"
+                    Log.e("PlayerActivity", "Player error", error)
                 }
                 override fun onPlaybackStateChanged(state: Int) {
                     isBuffering = state == Player.STATE_BUFFERING
@@ -482,162 +517,426 @@ fun PlayerScreen(
                 }
             })
         }
-        exoPlayer.value = player
+
+        // FIX: Assign to state so AndroidView.update picks it up
+        playerState.value = player
     }
 
+    // ── Subtitle toggle ──
     LaunchedEffect(subtitlesEnabled, tracksReady.value) {
-        if (tracksReady.value) exoPlayer.value?.let { applySubtitleState(it, subtitlesEnabled) }
+        if (tracksReady.value) {
+            playerState.value?.let { applySubtitleState(it, subtitlesEnabled) }
+        }
     }
 
-    LaunchedEffect(exoPlayer.value) {
+    // ── Position polling ──
+    LaunchedEffect(playerState.value) {
         while (true) {
-            delay(200)
-            exoPlayer.value?.let { player ->
-                currentPosition = player.currentPosition
-                totalDuration = player.duration.coerceAtLeast(1L)
+            delay(250)
+            playerState.value?.let { p ->
+                currentPosition = p.currentPosition
+                totalDuration   = p.duration.coerceAtLeast(1L)
                 streamData?.intro?.let { showSkipIntro = currentPosition in it.start until it.end }
                 streamData?.outro?.let { showSkipOutro = currentPosition in it.start until it.end }
             }
         }
     }
 
+    // ── Auto-hide controls ──
+    LaunchedEffect(showControls, isLocked, showSettings, isPlaying) {
+        if (showControls && !isLocked && !showSettings && isPlaying) {
+            delay(4000)
+            showControls = false
+        }
+    }
+
+    // ── Cleanup ──
     DisposableEffect(Unit) {
         onDispose {
-            exoPlayer.value?.release()
-            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            playerState.value?.release()
+            playerState.value = null
+            (context as? Activity)?.requestedOrientation =
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
-    fun seekBack() {
-        exoPlayer.value?.seekTo((exoPlayer.value!!.currentPosition - 10000).coerceAtLeast(0))
-        seekFeedback = "-10s"
+    fun seekBy(ms: Long) {
+        playerState.value?.let { p ->
+            p.seekTo((p.currentPosition + ms).coerceAtLeast(0L))
+            seekFeedback = if (ms > 0) "+${ms / 1000}s" else "${ms / 1000}s"
+        }
     }
 
-    fun seekForward() {
-        exoPlayer.value?.seekTo(exoPlayer.value!!.currentPosition + 10000)
-        seekFeedback = "+10s"
-    }
+    // ── UI ──
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        if (isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color(0xFF9B59F5))
-                    Spacer(Modifier.height(16.dp))
-                    Text("Loading stream...", color = Color.White)
-                }
-            }
-            return@Box
-        }
-
-        if (errorMsg.isNotEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.ErrorOutline, null, tint = Color.Red, modifier = Modifier.size(60.dp))
-                    Text("Failed to Load", color = Color.Red, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                    Text(errorMsg, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(16.dp), textAlign = TextAlign.Center)
-                }
-            }
-            return@Box
-        }
-
+        // ── PlayerView (ALWAYS rendered; player assigned in update) ──
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player = exoPlayer.value
-                    useController = false
-                    resizeMode = aspectModes[aspectRatioMode]
+                    useController  = false
+                    keepScreenOn   = true
+                    resizeMode     = aspectModes[aspectRatioMode]
+                    // Do NOT set player here – it's null. Set it in update.
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { view -> view.resizeMode = aspectModes[aspectRatioMode] }
+            update = { view ->
+                // FIX: Set player here so it updates whenever playerState changes
+                view.player     = playerState.value
+                view.resizeMode = aspectModes[aspectRatioMode]
+            }
         )
 
-        AnimatedVisibility(visible = showControls, enter = fadeIn(), exit = fadeOut()) {
+        // ── Loading overlay ──
+        if (isLoading) {
+            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CircularProgressIndicator(color = Color(0xFF9B59F5), strokeWidth = 3.dp)
+                    Text("Loading stream…", color = Color(0xFFCCCCCC), fontSize = 14.sp)
+                }
+            }
+            return@Box
+        }
+
+        // ── Error overlay ──
+        if (errorMsg.isNotEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize().background(Color(0x44000000))
-                    .pointerInput(Unit) { detectTapGestures { showControls = !showControls } }
+                Modifier.fillMaxSize().background(Color.Black),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF000000), Color(0x00000000)), endY = 120f)).padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
-                    Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(episodeTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text("Episode $episodeNumber", color = Color.Gray, fontSize = 12.sp)
-                    }
-                    IconButton(onClick = { showSettings = !showSettings }) { Icon(Icons.Default.Settings, null, tint = Color.White) }
-                }
-
-                Row(
-                    modifier = Modifier.align(Alignment.Center).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { seekBack() }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.FastRewind, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-                    IconButton(onClick = { exoPlayer.value?.playWhenReady = !isPlaying }, modifier = Modifier.size(64.dp).clip(CircleShape).background(Color(0xFF9B59F5))) {
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(40.dp))
-                    }
-                    IconButton(onClick = { seekForward() }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.FastForward, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-                }
-
                 Column(
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0x00000000), Color(0xFF000000)), startY = 80f)).padding(16.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(32.dp)
                 ) {
-                    Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Color(0x44FFFFFF), RoundedCornerShape(2.dp)).pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            val progress = (offset.x / size.width).coerceIn(0f, 1f)
-                            exoPlayer.value?.seekTo((progress * totalDuration).toLong())
-                        }
-                    }) {
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fraction = (currentPosition.toFloat() / totalDuration).coerceIn(0f, 1f)).background(Color(0xFF9B59F5), RoundedCornerShape(2.dp)))
-                    }
+                    Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFFF4444), modifier = Modifier.size(56.dp))
+                    Text("Stream Unavailable", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(errorMsg, color = Color(0xFF888888), fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(formatTime(currentPosition), color = Color.White, fontSize = 12.sp)
-                        Text(formatTime(totalDuration), color = Color.Gray, fontSize = 12.sp)
+                    Button(
+                        onClick = { /* trigger retry by re-launching the effect */
+                            (context as? Activity)?.finish()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Go Back")
                     }
                 }
+            }
+            return@Box
+        }
 
-                IconButton(onClick = { isLocked = !isLocked }, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
-                    Icon(if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen, null, tint = Color.White)
-                }
+        // ── Buffering spinner (above video) ──
+        if (isBuffering) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF9B59F5), strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
             }
         }
 
-        if (showSkipIntro) {
-            Button(onClick = { streamData?.intro?.let { exoPlayer.value?.seekTo(it.end) } }, modifier = Modifier.align(Alignment.BottomEnd).padding(32.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))) { Text("Skip Intro") }
-        }
-        if (showSkipOutro) {
-            Button(onClick = { streamData?.outro?.let { exoPlayer.value?.seekTo(it.end) } }, modifier = Modifier.align(Alignment.BottomEnd).padding(32.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9B59F5))) { Text("Skip Outro") }
-        }
-
-        if (showSettings) {
-            SettingsPanel(
-                hasSubtitles = streamData?.subtitles?.isNotEmpty() ?: false,
-                subtitlesEnabled = subtitlesEnabled,
-                onSubtitlesToggle = { subtitlesEnabled = it },
-                currentSpeed = currentSpeed,
-                onSpeedChange = { speed -> currentSpeed = speed; exoPlayer.value?.setPlaybackParameters(PlaybackParameters(speed)) },
-                aspectRatioMode = aspectRatioMode,
-                onAspectChange = { aspectRatioMode = it },
-                onDismiss = { showSettings = false }
+        // ── Double-tap zones when controls visible ──
+        if (!isLocked) {
+            Row(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = { seekBy(-10_000L) },
+                            onTap       = { showControls = !showControls }
+                        )
+                    }
+                )
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = { seekBy(+10_000L) },
+                            onTap       = { showControls = !showControls }
+                        )
+                    }
+                )
+            }
+        } else {
+            Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    detectTapGestures(onTap = { showControls = !showControls })
+                }
             )
         }
 
-        if (seekFeedback.isNotEmpty()) {
-            LaunchedEffect(seekFeedback) { delay(500); seekFeedback = "" }
-            Box(modifier = Modifier.align(Alignment.Center).background(Color(0x88000000), RoundedCornerShape(8.dp)).padding(16.dp)) {
-                Text(seekFeedback, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        // ── Controls overlay ──
+        AnimatedVisibility(
+            visible  = showControls,
+            enter    = fadeIn(tween(200)),
+            exit     = fadeOut(tween(300)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(Modifier.fillMaxSize().background(Color(0x55000000))) {
+
+                // ── Top bar ──
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent), endY = 140f))
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+                    }
+                    Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                        Text(
+                            episodeTitle,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Text("Episode $episodeNumber", color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                    }
+                    // Settings button (hidden when locked)
+                    if (!isLocked) {
+                        IconButton(onClick = { showSettings = !showSettings }) {
+                            Icon(Icons.Default.Settings, null, tint = Color.White)
+                        }
+                    }
+                    // Lock toggle
+                    IconButton(onClick = { isLocked = !isLocked }) {
+                        Icon(
+                            if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            null,
+                            tint = if (isLocked) Color(0xFF9B59F5) else Color.White
+                        )
+                    }
+                }
+
+                // ── Center controls (hidden when locked) ──
+                if (!isLocked) {
+                    Row(
+                        Modifier
+                            .align(Alignment.Center)
+                            .fillMaxWidth()
+                            .padding(horizontal = 40.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Rewind 10s
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = { seekBy(-10_000L) },
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Replay10,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+
+                        // Play/Pause
+                        Box(
+                            Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF9B59F5))
+                                .clickable {
+                                    playerState.value?.let { it.playWhenReady = !isPlaying }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+
+                        // Forward 10s
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = { seekBy(+10_000L) },
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Forward10,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── Bottom bar (hidden when locked) ──
+                if (!isLocked) {
+                    Column(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)), startY = 60f))
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .navigationBarsPadding()
+                    ) {
+                        // Seek bar
+                        val progress = if (isSeeking)
+                            (seekDragPosition.toFloat() / totalDuration).coerceIn(0f, 1f)
+                        else
+                            (currentPosition.toFloat() / totalDuration).coerceIn(0f, 1f)
+
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(20.dp)
+                                .pointerInput(totalDuration) {
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { offset ->
+                                            isSeeking = true
+                                            seekDragPosition = ((offset.x / size.width) * totalDuration).toLong()
+                                        },
+                                        onDragEnd = {
+                                            playerState.value?.seekTo(seekDragPosition)
+                                            isSeeking = false
+                                        },
+                                        onDragCancel = { isSeeking = false },
+                                        onHorizontalDrag = { _, dragAmount ->
+                                            val delta = (dragAmount / size.width * totalDuration).toLong()
+                                            seekDragPosition = (seekDragPosition + delta).coerceIn(0L, totalDuration)
+                                        }
+                                    )
+                                }
+                                .pointerInput(totalDuration) {
+                                    detectTapGestures { offset ->
+                                        val p = (offset.x / size.width).coerceIn(0f, 1f)
+                                        playerState.value?.seekTo((p * totalDuration).toLong())
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Track background
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color(0x44FFFFFF))
+                            )
+                            // Track fill
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(progress)
+                                    .height(3.dp)
+                                    .align(Alignment.CenterStart)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color(0xFF9B59F5))
+                            )
+                            // Thumb
+                            Box(
+                                Modifier
+                                    .align(Alignment.CenterStart)
+                                    .offset(x = (progress * (size.width / density)).dp - 6.dp)
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                            )
+                        }
+
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                formatTime(if (isSeeking) seekDragPosition else currentPosition),
+                                color = Color.White,
+                                fontSize = 12.sp
+                            )
+                            Text(formatTime(totalDuration), color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
-        if (isBuffering) {
-            Box(modifier = Modifier.align(Alignment.Center).size(50.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF9B59F5), modifier = Modifier.size(40.dp))
+        // ── Skip Intro button ──
+        if (showSkipIntro) {
+            OutlinedButton(
+                onClick = { streamData?.intro?.let { playerState.value?.seekTo(it.end) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 80.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
+                ),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) {
+                Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Skip Intro", fontWeight = FontWeight.SemiBold)
             }
+        }
+
+        // ── Skip Outro button ──
+        if (showSkipOutro) {
+            OutlinedButton(
+                onClick = { streamData?.outro?.let { playerState.value?.seekTo(it.end) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 80.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
+                ),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) {
+                Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Skip Outro", fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        // ── Seek feedback toast ──
+        AnimatedVisibility(
+            visible = seekFeedback.isNotEmpty(),
+            enter   = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit    = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            LaunchedEffect(seekFeedback) {
+                delay(600)
+                seekFeedback = ""
+            }
+            Box(
+                Modifier
+                    .background(Color(0xBB000000), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            ) {
+                Text(seekFeedback, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // ── Settings panel ──
+        if (showSettings) {
+            SettingsPanel(
+                hasSubtitles     = (streamData?.subtitles?.isNotEmpty()) == true,
+                subtitlesEnabled = subtitlesEnabled,
+                onSubtitlesToggle = { subtitlesEnabled = it },
+                currentSpeed     = currentSpeed,
+                onSpeedChange    = { speed ->
+                    currentSpeed = speed
+                    playerState.value?.setPlaybackParameters(PlaybackParameters(speed))
+                },
+                aspectRatioMode  = aspectRatioMode,
+                onAspectChange   = { aspectRatioMode = it },
+                onDismiss        = { showSettings = false }
+            )
         }
     }
 }
