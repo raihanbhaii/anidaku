@@ -42,7 +42,7 @@ fun AnimeCard(
                     .background(CardBg)
             )
             // Show SUB episode count badge (replaces the removed .type field)
-            anime.episodes?.sub?.let { subCount ->
+            anime.episodes?.subInt?.let { subCount ->
                 Text(
                     text = "SUB $subCount",
                     color = Color.White,
