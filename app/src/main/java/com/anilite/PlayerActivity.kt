@@ -43,6 +43,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.SubtitleConfiguration
@@ -504,7 +505,7 @@ fun PlayerScreen(
         val source = HlsMediaSource.Factory(factory).createMediaSource(itemBuilder.build())
 
         val player = ExoPlayer.Builder(context)
-            .setHandleAudioAttributes(true)
+            .setAudioAttributes(AudioAttributes.DEFAULT, true)
             .build()
             .apply {
                 setMediaSource(source)
