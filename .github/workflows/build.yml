@@ -1,13 +1,16 @@
-name: Build APK
+name: Build and Release APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    tags:
+      - 'v*'
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,15 +20,30 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Build with Gradle
+        run: ./gradlew assembleDebug
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Get Version Name
+        id: get_version
+        run: |
+          VERSION=$(grep "versionName" app/build.gradle.kts | awk -F'"' '{print $2}')
+          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
         with:
-          name: AniLite-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v${{ steps.get_version.outputs.version }}-${{ github.run_number }}
+          name: Release v${{ steps.get_version.outputs.version }} (Build ${{ github.run_number }})
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
