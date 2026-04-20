@@ -26,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -443,7 +444,8 @@ fun PlayerScreen(
     val playerState = remember { mutableStateOf<ExoPlayer?>(null) }
 
     // ── Hoist density into composable scope (FIX) ──
-    val density = LocalDensity.current.density
+    val density = LocalDensity.current
+    var sliderWidthPx by remember { mutableStateOf(0f) }
 
     val aspectModes = remember {
         listOf(
@@ -785,11 +787,14 @@ fun PlayerScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .height(20.dp)
-                                .pointerInput(totalDuration) {
+                                .onGloballyPositioned { sliderWidthPx = it.size.width.toFloat() }
+                                .pointerInput(totalDuration, sliderWidthPx) {
                                     detectHorizontalDragGestures(
                                         onDragStart = { offset ->
-                                            isSeeking = true
-                                            seekDragPosition = ((offset.x / size.width) * totalDuration).toLong()
+                                            if (sliderWidthPx > 0) {
+                                                isSeeking = true
+                                                seekDragPosition = ((offset.x / sliderWidthPx) * totalDuration).toLong()
+                                            }
                                         },
                                         onDragEnd = {
                                             playerState.value?.seekTo(seekDragPosition)
@@ -797,15 +802,19 @@ fun PlayerScreen(
                                         },
                                         onDragCancel = { isSeeking = false },
                                         onHorizontalDrag = { _, dragAmount ->
-                                            val delta = (dragAmount / size.width * totalDuration).toLong()
-                                            seekDragPosition = (seekDragPosition + delta).coerceIn(0L, totalDuration)
+                                            if (sliderWidthPx > 0) {
+                                                val delta = (dragAmount / sliderWidthPx * totalDuration).toLong()
+                                                seekDragPosition = (seekDragPosition + delta).coerceIn(0L, totalDuration)
+                                            }
                                         }
                                     )
                                 }
-                                .pointerInput(totalDuration) {
+                                .pointerInput(totalDuration, sliderWidthPx) {
                                     detectTapGestures { offset ->
-                                        val p = (offset.x / size.width).coerceIn(0f, 1f)
-                                        playerState.value?.seekTo((p * totalDuration).toLong())
+                                        if (sliderWidthPx > 0) {
+                                            val p = (offset.x / sliderWidthPx).coerceIn(0f, 1f)
+                                            playerState.value?.seekTo((p * totalDuration).toLong())
+                                        }
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -831,7 +840,7 @@ fun PlayerScreen(
                             Box(
                                 Modifier
                                     .align(Alignment.CenterStart)
-                                    .offset(x = (progress * (size.width / density)).dp - 6.dp)
+                                    .offset(x = with(density) { (progress * sliderWidthPx).toDp() } - 6.dp)
                                     .size(12.dp)
                                     .clip(CircleShape)
                                     .background(Color.White)
