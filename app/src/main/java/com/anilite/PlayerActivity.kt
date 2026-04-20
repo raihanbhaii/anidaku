@@ -877,7 +877,7 @@ fun PlayerScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = 80.dp),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
+                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                     brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
                 ),
                 shape = RoundedCornerShape(8.dp),
@@ -896,7 +896,7 @@ fun PlayerScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = 80.dp),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
+                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                     brush = Brush.linearGradient(listOf(Color(0xFF9B59F5), Color(0xFF7B3FD5)))
                 ),
                 shape = RoundedCornerShape(8.dp),
