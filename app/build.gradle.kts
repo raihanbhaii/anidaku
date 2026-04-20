@@ -48,12 +48,13 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("io.coil-kt:coil-compose:2.6.0")
     // Media3 ExoPlayer
-    implementation("androidx.media3:media3-exoplayer:1.3.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
-    implementation("androidx.media3:media3-ui:1.3.1")
-    implementation("androidx.media3:media3-datasource:1.3.1")
-    implementation("androidx.media3:media3-datasource-okhttp:1.3.1")
-    implementation("androidx.media3:media3-common:1.3.1")
+    val media3Version = "1.10.0"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-datasource:$media3Version")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     // Ktor
