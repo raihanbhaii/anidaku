@@ -123,7 +123,7 @@ class PlayerActivity : ComponentActivity() {
     }
 }
 
-// ==================== UPDATED FETCH FUNCTION ====================
+// ==================== UPDATED FETCH FUNCTION (BYANIME ONLY) ====================
 @OptIn(UnstableApi::class)
 suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     val cleanId = when {
@@ -133,7 +133,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
     }
     val epParam = if (episodeId.contains("?ep=")) episodeId.substringAfter("?ep=") else ""
 
-    // 1. Try primary byanime-iota API with multiple servers
+    // Try primary byanime-iota API with multiple servers
     val primaryServers = listOf("HD-1", "HD-2", "HD-3")
     for (server in primaryServers) {
         try {
@@ -196,7 +196,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         }
     }
 
-    // 2. Try Fallback byanime-iota API
+    // Try Fallback byanime-iota API
     for (server in primaryServers) {
         try {
             val baseUrl = "https://byanime-iota.vercel.app/api/stream/fallback"
@@ -230,28 +230,7 @@ suspend fun fetchStreamData(episodeId: String, category: String): StreamData {
         }
     }
 
-    // 3. Last Resort: Try AniApiService
-    val apiServers = listOf("vidstreaming", "vidcloud", "megacloud")
-    for (server in apiServers) {
-        try {
-            Log.d("PlayerActivity", "Last resort: AniApiService server $server")
-            val sourcesResponse = AniApiService.getSources(episodeId, server, category)
-            if (sourcesResponse.sources.isNotEmpty()) {
-                val m3u8 = sourcesResponse.sources.firstOrNull()?.url ?: ""
-                if (m3u8.isNotBlank() && m3u8.startsWith("http")) {
-                    Log.d("PlayerActivity", "✅ SUCCESS with AniApiService fallback")
-                    val subtitles = sourcesResponse.subtitles.map { sub ->
-                        SubtitleTrack(url = sub.url, label = sub.lang, kind = "subtitles")
-                    }
-                    return StreamData(m3u8, subtitles, null, null)
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("PlayerActivity", "AniApiService fallback failed: ${e.message}")
-        }
-    }
-
-    throw Exception("All servers failed to load stream. Please try another episode.")
+    throw Exception("ByAnime servers failed to load stream. Please try another episode.")
 }
 
 // ==================== HELPERS ====================
