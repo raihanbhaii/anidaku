@@ -33,7 +33,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -309,30 +311,4 @@ fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) 
     }
 }
 
-@Composable
-fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
-    var streamResponse by remember { mutableStateOf<StreamResponse?>(null) }
-    
-    LaunchedEffect(episodeId) {
-        try {
-            // Replace "/" with something safe if needed, but Ktor handles it if we pass the whole path
-            streamResponse = ApiClient.getStream(episodeId)
-        } catch (e: Exception) {}
-    }
-
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        if (streamResponse == null) {
-            CircularProgressIndicator(color = Color.Red)
-        } else {
-            // Here you would integrate ExoPlayer with AndroidView
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ExoPlayer Integration Placeholder", color = Color.White)
-                Text("Streaming URL: ${streamResponse?.streams?.firstOrNull()?.url?.take(30)}...", color = Color.Gray, fontSize = 10.sp)
-                Spacer(Modifier.height(20.dp))
-                Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
-                    Text("Go Back")
-                }
-            }
-        }
-    }
-}
+// PlayerScreen moved to separate file
