@@ -11,12 +11,15 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +35,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    override fun Bundle? onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             AnidakuApp()
@@ -45,13 +48,26 @@ fun AnidakuApp() {
     val navController = rememberNavController()
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
         NavHost(navController = navController, startDestination = "home") {
-            composable("home") { HomeScreen(onAnimeClick = { id -> navController.navigate("detail/$id") }) }
+            composable("home") { 
+                HomeScreen(onAnimeClick = { id -> navController.navigate("detail/$id") }) 
+            }
             composable(
                 "detail/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType })
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
             ) { backStackEntry ->
-                val id = backStackEntry.arguments?.getString("id") ?: ""
-                DetailScreen(id = id, onBack = { navController.popBackStack() })
+                val id = backStackEntry.arguments?.getInt("id") ?: 0
+                DetailScreen(
+                    id = id, 
+                    onBack = { navController.popBackStack() },
+                    onEpisodeClick = { episodeId -> navController.navigate("player/$episodeId") }
+                )
+            }
+            composable(
+                "player/{episodeId}",
+                arguments = listOf(navArgument("episodeId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val episodeId = backStackEntry.arguments?.getString("episodeId") ?: ""
+                PlayerScreen(episodeId = episodeId, onBack = { navController.popBackStack() })
             }
         }
     }
@@ -59,15 +75,17 @@ fun AnidakuApp() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onAnimeClick: (String) -> Unit) {
+fun HomeScreen(onAnimeClick: (Int) -> Unit) {
     val scope = rememberCoroutineScope()
     var trendingAnime by remember { mutableStateOf<List<AnimeSummary>>(emptyList()) }
+    var popularAnime by remember { mutableStateOf<List<AnimeSummary>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<AnimeSummary>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         try {
             trendingAnime = ApiClient.getTrending().results
+            popularAnime = ApiClient.getPopular().results
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -76,7 +94,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("ANIDAKU", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = { Text("ANIDAKU", fontWeight = FontWeight.ExtraBold, color = Color.Red, letterSpacing = 4.sp) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Black)
             )
         },
@@ -101,7 +119,7 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color.White,
+                    focusedBorderColor = Color.Red,
                     unfocusedBorderColor = Color.Gray
                 ),
                 shape = RoundedCornerShape(12.dp)
@@ -110,17 +128,17 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
             LazyColumn {
                 if (searchQuery.isEmpty()) {
                     item {
-                        Text(
-                            "Trending Now",
-                            modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    item {
+                        SectionTitle("Trending Now")
                         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
                             items(trendingAnime) { anime ->
+                                AnimeCard(anime, onAnimeClick)
+                            }
+                        }
+                    }
+                    item {
+                        SectionTitle("Most Popular")
+                        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp)) {
+                            items(popularAnime) { anime ->
                                 AnimeCard(anime, onAnimeClick)
                             }
                         }
@@ -136,7 +154,18 @@ fun HomeScreen(onAnimeClick: (String) -> Unit) {
 }
 
 @Composable
-fun AnimeCard(anime: AnimeSummary, onClick: (String) -> Unit) {
+fun SectionTitle(title: String) {
+    Text(
+        title,
+        modifier = Modifier.padding(16.dp),
+        style = MaterialTheme.typography.titleLarge,
+        color = Color.White,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+fun AnimeCard(anime: AnimeSummary, onClick: (Int) -> Unit) {
     Column(
         modifier = Modifier
             .width(150.dp)
@@ -144,7 +173,7 @@ fun AnimeCard(anime: AnimeSummary, onClick: (String) -> Unit) {
             .clickable { onClick(anime.id) }
     ) {
         AsyncImage(
-            model = anime.poster ?: anime.cover,
+            model = anime.coverImage?.getBestImage(),
             contentDescription = null,
             modifier = Modifier
                 .height(220.dp)
@@ -165,81 +194,143 @@ fun AnimeCard(anime: AnimeSummary, onClick: (String) -> Unit) {
 }
 
 @Composable
-fun SearchItem(anime: AnimeSummary, onClick: (String) -> Unit) {
+fun SearchItem(anime: AnimeSummary, onClick: (Int) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable { onClick(anime.id) },
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
-            model = anime.poster ?: anime.cover,
+            model = anime.coverImage?.getBestImage(),
             contentDescription = null,
             modifier = Modifier
-                .size(80.dp, 120.dp)
+                .size(70.dp, 100.dp)
                 .clip(RoundedCornerShape(4.dp)),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(anime.title.getDisplayTitle(), color = Color.White, fontWeight = FontWeight.Bold)
-            Text(anime.type ?: "", color = Color.Gray, fontSize = 12.sp)
-            Text(anime.status ?: "", color = Color.Gray, fontSize = 12.sp)
+            Text(anime.title.getDisplayTitle(), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${anime.format ?: "TV"} • ${anime.status ?: "Unknown"}", color = Color.Gray, fontSize = 12.sp)
+            Text("Score: ${anime.averageScore ?: "N/A"}%", color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(id: String, onBack: () -> Unit) {
+fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) {
     var info by remember { mutableStateOf<AnimeInfo?>(null) }
-    var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
+    var episodeResponse by remember { mutableStateOf<EpisodeResponse?>(null) }
+    var selectedProvider by remember { mutableStateOf("kiwi") }
+    var selectedCategory by remember { mutableStateOf("sub") }
 
     LaunchedEffect(id) {
         try {
             info = ApiClient.getAnimeInfo(id)
-            val epRes = ApiClient.getEpisodes(id)
-            // Pick first provider and sub for simplicity
-            episodes = epRes.providers.values.firstOrNull()?.episodes?.get("sub") ?: emptyList()
+            episodeResponse = ApiClient.getEpisodes(id)
         } catch (e: Exception) {}
     }
 
     if (info == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White)
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.Red)
         }
     } else {
+        val episodes = episodeResponse?.providers?.get(selectedProvider)?.episodes?.get(selectedCategory) ?: emptyList()
+
         LazyColumn(Modifier.fillMaxSize().background(Color.Black)) {
             item {
                 Box {
                     AsyncImage(
-                        model = info?.bannerImage ?: info?.coverImage,
+                        model = info?.bannerImage ?: info?.coverImage?.getBestImage(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().height(250.dp),
+                        modifier = Modifier.fillMaxWidth().height(300.dp),
                         contentScale = ContentScale.Crop
                     )
-                    Box(Modifier.fillMaxWidth().height(250.dp).background(Color.Black.copy(alpha = 0.4f)))
+                    Box(
+                        Modifier.fillMaxWidth().height(300.dp)
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                    )
+                    IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
+                    }
                 }
             }
             item {
                 Column(Modifier.padding(16.dp)) {
                     Text(info?.title?.getDisplayTitle() ?: "", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(info?.description?.replace(Regex("<.*?>"), "") ?: "", color = Color.Gray, fontSize = 14.sp, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${info?.season ?: ""} ${info?.seasonYear ?: ""}", color = Color.Gray, fontSize = 14.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("•", color = Color.Gray)
+                        Spacer(Modifier.width(8.dp))
+                        Text("${info?.episodes ?: "?"} Eps", color = Color.Gray, fontSize = 14.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("•", color = Color.Gray)
+                        Spacer(Modifier.width(8.dp))
+                        Text("${info?.averageScore ?: "?"}%", color = Color.Red, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                     Spacer(Modifier.height(16.dp))
-                    Text("Episodes", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(info?.description?.replace(Regex("<.*?>"), "") ?: "", color = Color.LightGray, fontSize = 14.sp)
+                    Spacer(Modifier.height(24.dp))
+                    
+                    // Provider/Category Selection
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Episodes", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        // In a real app, add chips to select provider/category
+                    }
                 }
             }
             items(episodes) { ep ->
                 Row(
-                    Modifier.fillMaxWidth().padding(16.dp).clickable { /* Handle Play */ },
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.DarkGray.copy(alpha = 0.3f))
+                        .clickable { onEpisodeClick(ep.id) }
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.size(100.dp, 60.dp).background(Color.DarkGray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
-                        Text("EP ${ep.number}", color = Color.White)
+                    Box(Modifier.size(40.dp).background(Color.Red, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
                     }
                     Spacer(Modifier.width(16.dp))
-                    Text(ep.title ?: "Episode ${ep.number}", color = Color.White)
+                    Column {
+                        Text("Episode ${ep.number}", color = Color.White, fontWeight = FontWeight.Bold)
+                        if (!ep.title.isNullOrBlank()) {
+                            Text(ep.title, color = Color.Gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
+    var streamResponse by remember { mutableStateOf<StreamResponse?>(null) }
+    
+    LaunchedEffect(episodeId) {
+        try {
+            // Replace "/" with something safe if needed, but Ktor handles it if we pass the whole path
+            streamResponse = ApiClient.getStream(episodeId)
+        } catch (e: Exception) {}
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        if (streamResponse == null) {
+            CircularProgressIndicator(color = Color.Red)
+        } else {
+            // Here you would integrate ExoPlayer with AndroidView
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ExoPlayer Integration Placeholder", color = Color.White)
+                Text("Streaming URL: ${streamResponse?.streams?.firstOrNull()?.url?.take(30)}...", color = Color.Gray, fontSize = 10.sp)
+                Spacer(Modifier.height(20.dp))
+                Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
+                    Text("Go Back")
                 }
             }
         }

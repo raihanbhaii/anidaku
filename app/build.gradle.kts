@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.dagger.hilt.android") version "2.51.1" apply false
+    id("com.google.devtools.ksp") version "2.0.21-1.0.27" apply false
 }
 
 android {
@@ -63,6 +65,17 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     
+    // Hilt Dependency Injection
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    // ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Room Database
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    // ksp("androidx.room:room-compiler:$roomVersion")
+
     // Networking & Serialization
     implementation("io.ktor:ktor-client-core:2.3.12")
     implementation("io.ktor:ktor-client-okhttp:2.3.12")
@@ -78,4 +91,5 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-session:$media3Version")
 }
