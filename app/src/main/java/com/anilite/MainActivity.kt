@@ -40,18 +40,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AnidakuApp()
+            AnidakuAppUI()  // <-- renamed here
         }
     }
 }
 
 @Composable
-fun AnidakuApp() {
+fun AnidakuAppUI() {  // <-- renamed from AnidakuApp to AnidakuAppUI
     val navController = rememberNavController()
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
         NavHost(navController = navController, startDestination = "home") {
-            composable("home") { 
-                HomeScreen(onAnimeClick = { id -> navController.navigate("detail/$id") }) 
+            composable("home") {
+                HomeScreen(onAnimeClick = { id -> navController.navigate("detail/$id") })
             }
             composable(
                 "detail/{id}",
@@ -59,7 +59,7 @@ fun AnidakuApp() {
             ) { backStackEntry ->
                 val id = backStackEntry.arguments?.getInt("id") ?: 0
                 DetailScreen(
-                    id = id, 
+                    id = id,
                     onBack = { navController.popBackStack() },
                     onEpisodeClick = { episodeId -> navController.navigate("player/$episodeId") }
                 )
@@ -105,7 +105,7 @@ fun HomeScreen(onAnimeClick: (Int) -> Unit) {
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { 
+                onValueChange = {
                     searchQuery = it
                     if (it.length > 2) {
                         scope.launch {
@@ -278,11 +278,8 @@ fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) 
                     Spacer(Modifier.height(16.dp))
                     Text(info?.description?.replace(Regex("<.*?>"), "") ?: "", color = Color.LightGray, fontSize = 14.sp)
                     Spacer(Modifier.height(24.dp))
-                    
-                    // Provider/Category Selection
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Episodes", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        // In a real app, add chips to select provider/category
                     }
                 }
             }
