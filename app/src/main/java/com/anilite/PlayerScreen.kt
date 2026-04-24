@@ -17,9 +17,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,6 +41,7 @@ fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
     var errorMessage   by remember { mutableStateOf<String?>(null) }
     var isFullscreen   by remember { mutableStateOf(false) }
     var isPlaying      by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableLongStateOf(0L) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -55,6 +58,14 @@ fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
                     if (playbackState == Player.STATE_READY) isLoading = false
                 }
             })
+        }
+    }
+
+    // Update current position periodically for skip intro button
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            currentPosition = exoPlayer.currentPosition
+            kotlinx.coroutines.delay(500) // Update every 500ms
         }
     }
 
@@ -141,7 +152,12 @@ fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
                     Spacer(Modifier.height(12.dp))
                     Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(errorMessage ?: "", color = Color.Gray, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(
+                        errorMessage ?: "", 
+                        color = Color.Gray, 
+                        fontSize = 13.sp, 
+                        textAlign = TextAlign.Center // Fixed: Using proper TextAlign import
+                    )
                     Spacer(Modifier.height(20.dp))
                     Button(
                         onClick = onBack,
@@ -197,15 +213,15 @@ fun PlayerScreen(episodeId: String, onBack: () -> Unit) {
 
         // ── Skip intro button ─────────────────────────────────────────────────
         streamResponse?.intro?.let { intro ->
-            val currentPos = exoPlayer.currentPosition / 1000
-            if (currentPos >= intro.start && currentPos <= intro.end) {
+            val currentPosSeconds = currentPosition / 1000L // Fixed: Convert to seconds as Long
+            if (currentPosSeconds >= intro.start && currentPosSeconds <= intro.end) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(bottom = 72.dp, end = 16.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(6.dp)) // Fixed: Using proper clip import
                         .background(BrandPurple)
-                        .clickable { exoPlayer.seekTo(intro.end.toLong() * 1000) }
+                        .clickable { exoPlayer.seekTo(intro.end.toLong() * 1000L) } // Fixed: Use Long multiplication
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text("Skip Intro ›", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
