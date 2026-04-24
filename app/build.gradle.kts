@@ -1,10 +1,10 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.android") version "2.0.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.20"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20"
-    id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android") version "2.51.1"
+    id("com.google.devtools.ksp") version "2.0.20-1.0.25"
 }
 
 android {

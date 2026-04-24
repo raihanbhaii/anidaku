@@ -12,8 +12,6 @@ buildscript {
     }
 }
 
-// allprojects block removed to comply with dependencyResolutionManagement in settings.gradle
-
 task("clean", type: Delete) {
     delete(rootProject.buildDir)
 }
