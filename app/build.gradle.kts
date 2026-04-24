@@ -43,9 +43,7 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
-    }
+    // composeOptions removed as it's deprecated in Kotlin 2.0+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
