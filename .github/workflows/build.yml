@@ -42,7 +42,7 @@ jobs:
     - name: 🔨 Forging the Signed APK...
       run: |
         ./gradlew assembleRelease \
-          -Pandroid.injected.signing.store.file=app/release-key.jks \
+          -Pandroid.injected.signing.store.file=${{ github.workspace }}/app/release-key.jks \
           -Pandroid.injected.signing.store.password=android \
           -Pandroid.injected.signing.key.alias=release \
           -Pandroid.injected.signing.key.password=android
