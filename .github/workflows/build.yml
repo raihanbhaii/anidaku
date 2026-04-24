@@ -27,23 +27,31 @@ jobs:
     - name: 🔓 Unlocking the Gradle wrapper...
       run: chmod +x gradlew
 
-    - name: 🔨 Forging the APK...
-      run: ./gradlew assembleRelease
+    - name: 🔑 Generating signing key...
+      run: |
+        keytool -genkey -v \
+          -keystore app/release-key.jks \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -alias release \
+          -storepass android \
+          -keypass android \
+          -dname "CN=App, OU=Dev, O=Company, L=City, ST=State, C=US"
+
+    - name: 🔨 Forging the Signed APK...
+      run: |
+        ./gradlew assembleRelease \
+          -Pandroid.injected.signing.store.file=app/release-key.jks \
+          -Pandroid.injected.signing.store.password=android \
+          -Pandroid.injected.signing.key.alias=release \
+          -Pandroid.injected.signing.key.password=android
 
     - name: 📦 Stashing the APK...
       uses: actions/upload-artifact@v4
       with:
         name: app-release
         path: app/build/outputs/apk/release/*.apk
-
-    - name: 🏗️ Bundling the AAB...
-      run: ./gradlew bundleRelease
-
-    - name: 🎒 Stashing the AAB...
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-bundle
-        path: app/build/outputs/bundle/release/*.aab
 
     - name: 🏷️ Tagging the release...
       id: tag
@@ -68,12 +76,10 @@ jobs:
           🕒 Built at: `${{ github.event.head_commit.timestamp }}`
           
           ### 📦 What's inside:
-          - 📱 APK — install directly on your device
-          - 📦 AAB — ready for Play Store upload
+          - 📱 Signed APK — install directly on your device
           
           > 🏆 GG! Another successful build!
         files: |
           app/build/outputs/apk/release/*.apk
-          app/build/outputs/bundle/release/*.aab
         draft: false
         prerelease: false
