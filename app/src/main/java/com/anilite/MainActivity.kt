@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import dagger.hilt.android.AndroidEntryPoint
 
 // ── Brand colours ──────────────────────────────────────────────────────────────
-val BrandPurple       = Color(0xFFFF640A).copy(alpha = 0f).let { Color(0xFF7B2FBE) }   // primary
+val BrandPurple       = Color(0xFF7B2FBE)   // primary
 val BrandPurpleDark   = Color(0xFF5B1FA0)
 val BrandPurpleLight  = Color(0xFFA64EE0)
 val AccentOrange      = Color(0xFFFF6B00)   // Crunchyroll-style accent for badges
@@ -335,7 +335,9 @@ fun SpotlightHero(anime: AnimeSummary, onClick: (Int) -> Unit) {
                 OutlinedButton(
                     onClick = { /* TODO: add to watchlist */ },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceCard),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = Brush.horizontalGradient(listOf(SurfaceCard, SurfaceCard))
+                    ),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                 ) {
@@ -610,7 +612,8 @@ fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) 
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-24).dp),
-                    crossAxisAlignment = Alignment.Bottom
+                    horizontalArrangement = Arrangement.Start, // Fixed: using correct parameter
+                    verticalAlignment = Alignment.Bottom // Fixed: using correct parameter
                 ) {
                     // Cover image
                     AsyncImage(
@@ -824,7 +827,7 @@ fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) 
                             Text(it, color = TextMuted, fontSize = 11.sp)
                         }
                     }
-                    // Duration
+                    // Duration - Fixed: Check if duration exists in Episode data class
                     ep.duration?.let { dur ->
                         val mins = dur / 60
                         Text("${mins}m", color = TextMuted, fontSize = 11.sp)
@@ -835,18 +838,3 @@ fun DetailScreen(id: Int, onBack: () -> Unit, onEpisodeClick: (String) -> Unit) 
         }
     }
 }
-
-// ── Alignment helper ───────────────────────────────────────────────────────────
-private val Alignment.Companion.Bottom get() = Alignment.Bottom
-
-private fun Row(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    crossAxisAlignment: Alignment.Vertical = Alignment.Top,
-    content: @Composable RowScope.() -> Unit
-) = Row(
-    modifier = modifier,
-    horizontalArrangement = horizontalArrangement,
-    verticalAlignment = crossAxisAlignment,
-    content = content
-)
