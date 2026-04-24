@@ -7,7 +7,47 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+
+// ── Data Classes ──────────────────────────────────────────────────────────────
+
+@Serializable
+data class SuggestionsResponse(
+    val suggestions: List<Suggestion> = emptyList()
+)
+
+@Serializable
+data class Suggestion(
+    val id: Int = 0,
+    val name: String = "",
+    val image: String? = null,
+    val type: String? = null
+)
+
+@Serializable
+data class CharactersResponse(
+    val characters: List<Character> = emptyList()
+)
+
+@Serializable
+data class Character(
+    val id: Int = 0,
+    val name: String = "",
+    val image: String? = null,
+    val role: String? = null,
+    val voiceActors: List<VoiceActor> = emptyList()
+)
+
+@Serializable
+data class VoiceActor(
+    val id: Int = 0,
+    val name: String = "",
+    val image: String? = null,
+    val language: String? = null
+)
+
+// ── API Client ────────────────────────────────────────────────────────────────
 
 object ApiClient {
     private const val BASE_URL = "https://miruro-api-rho.vercel.app"
