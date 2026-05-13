@@ -70,28 +70,30 @@ jobs:
           done
         shell: bash
 
-      # ── 7. Build archive (unsigned) ───────────────────────────
-      # NOTE: Use -target instead of -scheme to avoid archive action config issue
-      - name: Build iOS archive
+      # ── 7. Build .app (unsigned, no scheme/archive needed) ─────
+      - name: Build iOS app
         run: |
           gem install xcpretty 2>/dev/null || true
           
+          # Build the .app directly (no archive, no scheme required)
           xcodebuild \
             -project ios/anidaku.xcodeproj \
             -target AnidakuTemp \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath $RUNNER_TEMP/anidaku.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            archive
+            clean build
+          
+          # Find the built .app
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "AnidakuTemp.app" -type d | head -1)
+          echo "Built app at: $APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
 
-      # ── 8. Export unsigned IPA ─────────────────────────────────
+      # ── 8. Package unsigned IPA ────────────────────────────────
       - name: Export unsigned IPA
         run: |
-          mkdir -p $RUNNER_TEMP/ipa
-          APP_PATH=$(find $RUNNER_TEMP/anidaku.xcarchive -name "*.app" | head -1)
           mkdir -p $RUNNER_TEMP/ipa/Payload
           cp -r "$APP_PATH" $RUNNER_TEMP/ipa/Payload/
           cd $RUNNER_TEMP/ipa
