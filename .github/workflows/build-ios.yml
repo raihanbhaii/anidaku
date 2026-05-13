@@ -1,0 +1,74 @@
+name: Build AniDaku IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-14
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node setup ───────────────────────────────────────────
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # ── 3. Ruby / Bundler (for CocoaPods) ───────────────────────
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      # ── 4. Install JS dependencies ───────────────────────────────
+      - name: Install npm dependencies
+        run: npm ci
+
+      # ── 5. Install CocoaPods ─────────────────────────────────────
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods
+          cd ios && pod install --repo-update
+
+      # ── 6. Build archive (unsigned) ──────────────────────────────
+      - name: Build iOS archive
+        run: |
+          xcodebuild \
+            -workspace ios/anidaku.xcworkspace \
+            -scheme anidaku \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $RUNNER_TEMP/anidaku.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive | xcpretty
+
+      # ── 7. Export unsigned IPA ───────────────────────────────────
+      - name: Export unsigned IPA
+        run: |
+          mkdir -p $RUNNER_TEMP/ipa
+          # Package .app from archive into .ipa manually (no signing)
+          APP_PATH=$(find $RUNNER_TEMP/anidaku.xcarchive -name "*.app" | head -1)
+          mkdir -p $RUNNER_TEMP/ipa/Payload
+          cp -r "$APP_PATH" $RUNNER_TEMP/ipa/Payload/
+          cd $RUNNER_TEMP/ipa
+          zip -r anidaku.ipa Payload/
+          echo "IPA built at: $RUNNER_TEMP/ipa/anidaku.ipa"
+
+      # ── 8. Upload IPA artifact ───────────────────────────────────
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: anidaku-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/anidaku.ipa
+          retention-days: 7
