@@ -71,14 +71,14 @@ jobs:
         shell: bash
 
       # ── 7. Build archive (unsigned) ───────────────────────────
-      # NOTE: Use AnidakuTemp scheme (has archive action configured)
+      # NOTE: Use -target instead of -scheme to avoid archive action config issue
       - name: Build iOS archive
         run: |
           gem install xcpretty 2>/dev/null || true
           
           xcodebuild \
-            -workspace ios/anidaku.xcworkspace \
-            -scheme AnidakuTemp \
+            -project ios/anidaku.xcodeproj \
+            -target AnidakuTemp \
             -configuration Release \
             -sdk iphoneos \
             -archivePath $RUNNER_TEMP/anidaku.xcarchive \
