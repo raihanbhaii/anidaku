@@ -43,23 +43,14 @@ jobs:
             cp -R temp_ios/ios/* ios/
             rm -rf temp_ios
             
-            # Rename project files to match your app name
             mv "ios/AnidakuTemp.xcodeproj" "ios/anidaku.xcodeproj" 2>/dev/null || true
             mv "ios/AnidakuTemp.xcworkspace" "ios/anidaku.xcworkspace" 2>/dev/null || true
-            
-            # Rename scheme inside the project
-            mv "ios/anidaku.xcodeproj/xcshareddata/xcschemes/AnidakuTemp.xcscheme" \
-               "ios/anidaku.xcodeproj/xcshareddata/xcschemes/anidaku.xcscheme" 2>/dev/null || true
             
             echo "✅ iOS project generated"
           fi
           
           echo "📁 iOS directory contents:"
           ls -la ios/
-          
-          echo "📋 Available schemes:"
-          xcodebuild -list -workspace ios/anidaku.xcworkspace 2>/dev/null || \
-          xcodebuild -list -project ios/anidaku.xcodeproj 2>/dev/null || true
 
       # ── 6. Install CocoaPods (with retry) ───────────────────────
       - name: Install CocoaPods
@@ -80,14 +71,14 @@ jobs:
         shell: bash
 
       # ── 7. Build archive (unsigned) ───────────────────────────
+      # NOTE: Use AnidakuTemp scheme (has archive action configured)
       - name: Build iOS archive
         run: |
-          # Install xcpretty if not present
           gem install xcpretty 2>/dev/null || true
           
           xcodebuild \
             -workspace ios/anidaku.xcworkspace \
-            -scheme anidaku \
+            -scheme AnidakuTemp \
             -configuration Release \
             -sdk iphoneos \
             -archivePath $RUNNER_TEMP/anidaku.xcarchive \
