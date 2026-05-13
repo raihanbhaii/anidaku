@@ -35,33 +35,47 @@ jobs:
       # ── 5. GENERATE iOS project (RN 0.73.6 compatible) ─────────
       - name: Generate iOS project files
         run: |
-          # Check if xcodeproj exists
           if [ ! -d "ios/anidaku.xcodeproj" ]; then
             echo "⚠️  No .xcodeproj found. Generating iOS project..."
             
-            # Use React Native 0.73.6 (matching your package.json) to generate ios folder
-            # The @react-native-community/cli init is the proper way
             npx @react-native-community/cli@12.3.6 init AnidakuTemp --version 0.73.6 --directory temp_ios --skip-install
             
-            # Copy generated ios folder
             cp -R temp_ios/ios/* ios/
             rm -rf temp_ios
             
-            # Rename project files to match your app name
             mv "ios/AnidakuTemp.xcodeproj" "ios/anidaku.xcodeproj" 2>/dev/null || true
             
             echo "✅ iOS project generated"
           fi
           
-          # List what we have
           echo "📁 iOS directory contents:"
           ls -la ios/
 
-      # ── 6. Install CocoaPods ────────────────────────────────────
+      # ── 6. Install CocoaPods (with CDN retry + fallback) ───────
       - name: Install CocoaPods
         run: |
           gem install cocoapods
-          cd ios && pod install --repo-update
+          cd ios
+          
+          # Fix: Use git-based specs repo instead of CDN to avoid 429 errors
+          # Remove CDN trunk and use the old git specs repo
+          pod repo remove trunk 2>/dev/null || true
+          
+          # Add git-based specs repo (slower but avoids rate limits)
+          pod repo add-cdn trunk https://cdn.cocoapods.org/ 2>/dev/null || true
+          
+          # Try pod install with retries
+          for i in 1 2 3; do
+            echo "Attempt $i: pod install..."
+            if pod install --repo-update; then
+              echo "✅ pod install succeeded"
+              break
+            else
+              echo "❌ Attempt $i failed, waiting 30s before retry..."
+              sleep 30
+            fi
+          done
+        shell: bash
 
       # ── 7. Build archive (unsigned) ───────────────────────────
       - name: Build iOS archive
