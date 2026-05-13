@@ -15,30 +15,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Node setup (no cache= key — no lockfile in repo) ────
+      # ── 2. Node setup ─────────────────────────────────────────
       - name: Setup Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # ── 3. Ruby / Bundler (for CocoaPods) ───────────────────────
+      # ── 3. Ruby / Bundler (for CocoaPods) ─────────────────────
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
 
-      # ── 4. Install JS dependencies (npm install, no lockfile needed)
+      # ── 4. Install JS dependencies ────────────────────────────
       - name: Install npm dependencies
         run: npm install
 
-      # ── 5. Install CocoaPods ─────────────────────────────────────
+      # ── 5. GENERATE iOS project (missing .xcodeproj fix) ───────
+      - name: Generate iOS project files
+        run: |
+          # Check if xcodeproj exists
+          if [ ! -d "ios/anidaku.xcodeproj" ]; then
+            echo "⚠️  No .xcodeproj found. Generating iOS project..."
+            
+            # Method 1: Use @react-native-community/cli to generate ios folder
+            npx react-native@latest init AnidakuTemp --template react-native@latest --directory temp_ios --skip-install
+            cp -R AnidakuTemp/ios/* ios/
+            rm -rf AnidakuTemp
+            
+            # Clean up the temp project name and fix bundle identifier
+            mv "ios/AnidakuTemp.xcodeproj" "ios/anidaku.xcodeproj" 2>/dev/null || true
+            mv "ios/AnidakuTemp.xcworkspace" "ios/anidaku.xcworkspace" 2>/dev/null || true
+            
+            echo "✅ iOS project generated"
+          fi
+          
+          # List what we have
+          ls -la ios/
+
+      # ── 6. Install CocoaPods ────────────────────────────────────
       - name: Install CocoaPods
         run: |
           gem install cocoapods
           cd ios && pod install --repo-update
 
-      # ── 6. Build archive (unsigned) ──────────────────────────────
+      # ── 7. Build archive (unsigned) ───────────────────────────
       - name: Build iOS archive
         run: |
           xcodebuild \
@@ -52,11 +74,10 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             archive | xcpretty
 
-      # ── 7. Export unsigned IPA ───────────────────────────────────
+      # ── 8. Export unsigned IPA ─────────────────────────────────
       - name: Export unsigned IPA
         run: |
           mkdir -p $RUNNER_TEMP/ipa
-          # Package .app from archive into .ipa manually (no signing)
           APP_PATH=$(find $RUNNER_TEMP/anidaku.xcarchive -name "*.app" | head -1)
           mkdir -p $RUNNER_TEMP/ipa/Payload
           cp -r "$APP_PATH" $RUNNER_TEMP/ipa/Payload/
@@ -64,7 +85,7 @@ jobs:
           zip -r anidaku.ipa Payload/
           echo "IPA built at: $RUNNER_TEMP/ipa/anidaku.ipa"
 
-      # ── 8. Upload IPA artifact ───────────────────────────────────
+      # ── 9. Upload IPA artifact ─────────────────────────────────
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
