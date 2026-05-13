@@ -28,30 +28,33 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
 
-      # ── 4. Install JS dependencies ────────────────────────────
+      # ── 4. Install JS dependencies ──────────────────────────────
       - name: Install npm dependencies
         run: npm install
 
-      # ── 5. GENERATE iOS project (missing .xcodeproj fix) ───────
+      # ── 5. GENERATE iOS project (RN 0.73.6 compatible) ─────────
       - name: Generate iOS project files
         run: |
           # Check if xcodeproj exists
           if [ ! -d "ios/anidaku.xcodeproj" ]; then
             echo "⚠️  No .xcodeproj found. Generating iOS project..."
             
-            # Method 1: Use @react-native-community/cli to generate ios folder
-            npx react-native@latest init AnidakuTemp --template react-native@latest --directory temp_ios --skip-install
-            cp -R AnidakuTemp/ios/* ios/
-            rm -rf AnidakuTemp
+            # Use React Native 0.73.6 (matching your package.json) to generate ios folder
+            # The @react-native-community/cli init is the proper way
+            npx @react-native-community/cli@12.3.6 init AnidakuTemp --version 0.73.6 --directory temp_ios --skip-install
             
-            # Clean up the temp project name and fix bundle identifier
+            # Copy generated ios folder
+            cp -R temp_ios/ios/* ios/
+            rm -rf temp_ios
+            
+            # Rename project files to match your app name
             mv "ios/AnidakuTemp.xcodeproj" "ios/anidaku.xcodeproj" 2>/dev/null || true
-            mv "ios/AnidakuTemp.xcworkspace" "ios/anidaku.xcworkspace" 2>/dev/null || true
             
             echo "✅ iOS project generated"
           fi
           
           # List what we have
+          echo "📁 iOS directory contents:"
           ls -la ios/
 
       # ── 6. Install CocoaPods ────────────────────────────────────
