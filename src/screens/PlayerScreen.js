@@ -4,8 +4,8 @@ import {
   TouchableOpacity, StatusBar, ScrollView, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Video from 'react-native-video';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Video, ResizeMode } from 'expo-av';
+import { Ionicons as Icon } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { COLORS, FONTS } from '../utils/theme';
 
